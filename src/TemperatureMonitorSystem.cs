@@ -66,24 +66,28 @@ namespace TemperatureMonitor
 
         public override void StartClientSide(ICoreClientAPI api)
         {
-            this.ClientApi = api;
-            
-            // Pobierz język z ustawień klienta i zaktualizuj tłumaczenia
-            translation = new Translation(this.ClientApi, Lang.CurrentLocale);
-            
             try
             {
+                this.ClientApi = api;
+                
+                // Pobierz język z ustawień klienta i zaktualizuj tłumaczenia
+                translation = new Translation(this.ClientApi, Lang.CurrentLocale);
+                
                 // Rejestracja kanału i wiadomości sieciowych
-                api.Network.RegisterChannel("temperaturemonitor")
-                   .RegisterMessageType<TemperatureDataRequest>()
-                   .RegisterMessageType<TemperatureDataResponse>()
-                   .SetMessageHandler<TemperatureDataResponse>(OnTemperatureDataResponse);
+                api.Logger.Debug("[TemperatureMonitor] Registering network channel");
+                var channel = api.Network.RegisterChannel("temperaturemonitor");
+                api.Logger.Debug("[TemperatureMonitor] Registering message types");
+                channel.RegisterMessageType<TemperatureDataRequest>();
+                channel.RegisterMessageType<TemperatureDataResponse>();
+                api.Logger.Debug("[TemperatureMonitor] Setting message handler");
+                channel.SetMessageHandler<TemperatureDataResponse>(OnTemperatureDataResponse);
                 
                 // Rejestracja klawisza skrótu
+                api.Logger.Debug("[TemperatureMonitor] Registering hotkey");
                 api.Input.RegisterHotKey(HOTKEY_CODE, translation.Get("temperature_history"), GlKeys.T, HotkeyType.GUIOrOtherControls, altPressed: true);
                 api.Input.SetHotKeyHandler(HOTKEY_CODE, OnToggleTemperatureDialog);
                 
-                api.Logger.Debug("TemperatureMonitor: Client-side start method called!");
+                api.Logger.Debug("[TemperatureMonitor] Client-side start method called!");
             }
             catch (Exception ex)
             {
@@ -196,7 +200,7 @@ namespace TemperatureMonitor
                 ClientApi.ShowChatMessage(translation.Get("temperature_history") + ":");
                 
                 int recordCount = temperatureData.Count;
-                ClientApi.ShowChatMessage($"Found {recordCount} temperature records");
+                // ClientApi.ShowChatMessage($"Found {recordCount} temperature records");
                 
                 foreach (var prop in temperatureData.Properties())
                 {
@@ -241,15 +245,15 @@ namespace TemperatureMonitor
             // Sprawdź czas w grze zamiast rzeczywistego
             double gameHours = this.ServerApi.World.Calendar.TotalHours;
             
-            // Zapisuj dane co pełną godzinę gry
-            if (Math.Floor(gameHours) > Math.Floor(lastCheckGameHour))
+            // Co 15 minut gry (4 razy na godzinę)
+            if (Math.Floor(gameHours * 4) > Math.Floor(lastCheckGameHour * 4))
             {
-                this.ServerApi.Logger.Notification($"[TemperatureMonitor] Nowa godzina w grze: {Math.Floor(gameHours)}");
+                this.ServerApi.Logger.Notification($"[TemperatureMonitor] Checking temperature at game hour: {gameHours:F1}");
                 lastCheckGameHour = gameHours;
                 CheckTemperatures();
             }
         }
- 
+
         private void CheckTemperatures()
         {
             if (this.ServerApi == null || config == null) return;
@@ -416,22 +420,48 @@ namespace TemperatureMonitor
         {
             try
             {
-                if (ClientApi == null || translation == null) return false;
+                if (ClientApi == null)
+                {
+                    Console.WriteLine("[TemperatureMonitor] Error: ClientApi is null");
+                    return false;
+                }
                 
-                ClientApi.Logger.Debug("[TemperatureMonitor] Alt+T pressed, requesting temperature data from server");
-                ClientApi.ShowChatMessage(translation.Get("hotkey_detected"));
+                if (translation == null)
+                {
+                    ClientApi.Logger.Error("[TemperatureMonitor] Error: translation is null");
+                    ClientApi.ShowChatMessage("Error: translation system not initialized");
+                    return false;
+                }
                 
+                ClientApi.Logger.Debug("[TemperatureMonitor] Alt+T pressed, checking network channel");
+                
+                var channel = ClientApi.Network.GetChannel("temperaturemonitor");
+                if (channel == null)
+                {
+                    ClientApi.Logger.Error("[TemperatureMonitor] Error: Network channel 'temperaturemonitor' not found");
+                    ClientApi.ShowChatMessage("Error: Network communication channel not available");
+                    return false;
+                }
+                
+                // ClientApi.ShowChatMessage(translation.Get("hotkey_detected"));
+                
+                ClientApi.Logger.Debug("[TemperatureMonitor] Sending temperature data request to server");
                 // Zamiast próbować czytać plik lokalnie, wysyłamy żądanie do serwera
-                ClientApi.Network.GetChannel("temperaturemonitor")
-                    .SendPacket(new TemperatureDataRequest());
+                channel.SendPacket(new TemperatureDataRequest());
                 
                 return true;
             }
             catch (Exception ex)
             {
-                ClientApi?.Logger.Error($"[TemperatureMonitor] Error in OnToggleTemperatureDialog: {ex.Message}\n{ex.StackTrace}");
                 if (ClientApi != null)
+                {
+                    ClientApi.Logger.Error($"[TemperatureMonitor] Error in OnToggleTemperatureDialog: {ex.Message}\n{ex.StackTrace}");
                     ClientApi.ShowChatMessage($"Error: {ex.Message}");
+                }
+                else
+                {
+                    Console.WriteLine($"[TemperatureMonitor] Critical error: {ex.Message}");
+                }
             }
             
             return false;
