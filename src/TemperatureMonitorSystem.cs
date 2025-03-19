@@ -9,9 +9,27 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Vintagestory.API.MathTools;
 using Vintagestory.API.Common.Entities;
+using ProtoBuf;
 
 namespace TemperatureMonitor
 {
+    // Klasy do przesyłania wiadomości sieciowych
+    [ProtoContract]
+    public class TemperatureDataRequest
+    {
+        // Pusta klasa, tylko sama prośba o dane
+    }
+
+    [ProtoContract]
+    public class TemperatureDataResponse
+    {
+        [ProtoMember(1)]
+        public bool Success { get; set; }
+        
+        [ProtoMember(2)]
+        public string JsonData { get; set; } = "";
+    }
+
     public class TemperatureMonitorSystem : ModSystem
     {
         // Stała definicja kodu skrótu klawiszowego
@@ -19,9 +37,7 @@ namespace TemperatureMonitor
         
         string? worldSpecificPath;
         private Translation? translation;
-        // #pragma warning disable CS0169
         // private GuiDialogTemperature? temperatureDialog;
-        // #pragma warning restore CS0169
         public ICoreAPI? api;
         public ICoreClientAPI? ClientApi;
         public ICoreServerAPI? ServerApi;
@@ -50,30 +66,34 @@ namespace TemperatureMonitor
 
         public override void StartClientSide(ICoreClientAPI api)
         {
-            this.ClientApi = api;
-            
-            // Pobierz język z ustawień klienta i zaktualizuj tłumaczenia
-            translation = new Translation(this.ClientApi, Lang.CurrentLocale);
-            
             try
             {
-                // Zakomentuj lub usuń inicjalizację okna dialogowego
-                // temperatureDialog = new GuiDialogTemperature(ClientApi, translation, HOTKEY_CODE);
+                this.ClientApi = api;
+                
+                // Pobierz język z ustawień klienta i zaktualizuj tłumaczenia
+                translation = new Translation(this.ClientApi, Lang.CurrentLocale);
+                
+                // Rejestracja kanału i wiadomości sieciowych
+                api.Logger.Debug("[TemperatureMonitor] Registering network channel");
+                var channel = api.Network.RegisterChannel("temperaturemonitor");
+                api.Logger.Debug("[TemperatureMonitor] Registering message types");
+                channel.RegisterMessageType<TemperatureDataRequest>();
+                channel.RegisterMessageType<TemperatureDataResponse>();
+                api.Logger.Debug("[TemperatureMonitor] Setting message handler");
+                channel.SetMessageHandler<TemperatureDataResponse>(OnTemperatureDataResponse);
                 
                 // Rejestracja klawisza skrótu
-                api.Logger.Debug($"[TemperatureMonitor] Registering hotkey: {HOTKEY_CODE}");
+                api.Logger.Debug("[TemperatureMonitor] Registering hotkey");
                 api.Input.RegisterHotKey(HOTKEY_CODE, translation.Get("temperature_history"), GlKeys.T, HotkeyType.GUIOrOtherControls, altPressed: true);
-                api.Logger.Debug($"[TemperatureMonitor] Hotkey registration");
-                
-                // Prostszy handler dla klawisza skrótu
                 api.Input.SetHotKeyHandler(HOTKEY_CODE, OnToggleTemperatureDialog);
+                
+                api.Logger.Debug("[TemperatureMonitor] Client-side start method called!");
             }
             catch (Exception ex)
             {
-                ClientApi.Logger.Error($"[TemperatureMonitor] Error initializing: {ex.Message}\n{ex.StackTrace}");
+                api.Logger.Error($"[TemperatureMonitor] Error in StartClientSide: {ex.Message}\n{ex.StackTrace}");
             }
             
-            api.Logger.Debug("TemperatureMonitor: Client-side start method called!");
             base.StartClientSide(api);
         }
 
@@ -86,6 +106,12 @@ namespace TemperatureMonitor
             
             // Resetuj licznik czasu
             lastCheckGameHour = 0;
+            
+            // Rejestruj kanał i wiadomości sieciowe
+            api.Network.RegisterChannel("temperaturemonitor")
+               .RegisterMessageType<TemperatureDataRequest>()
+               .RegisterMessageType<TemperatureDataResponse>()
+               .SetMessageHandler<TemperatureDataRequest>(OnTemperatureDataRequest);
             
             // Dodajemy log przed rejestracją komendy
             api.Logger.Debug("[TemperatureMonitor] Trying to register command 'tempsensor'");
@@ -108,6 +134,110 @@ namespace TemperatureMonitor
             base.StartServerSide(api);
         }
 
+        // Handler żądania danych temperatury od klienta
+        private void OnTemperatureDataRequest(IServerPlayer fromPlayer, TemperatureDataRequest message)
+        {
+            if (ServerApi == null || worldSpecificPath == null) return;
+            
+            ServerApi.Logger.Debug($"[TemperatureMonitor] Received temperature data request from player {fromPlayer.PlayerName}");
+            
+            string filePath = Path.Combine(worldSpecificPath, "TemperatureMonitorlog.json");
+            if (!File.Exists(filePath)) 
+            {
+                ServerApi.Logger.Debug($"[TemperatureMonitor] Temperature data file not found at: {filePath}");
+                // Wysyłamy pustą odpowiedź
+                ServerApi.Network.GetChannel("temperaturemonitor")
+                    .SendPacket(new TemperatureDataResponse { Success = false }, fromPlayer);
+                return;
+            }
+            
+            try
+            {
+                string jsonContent = File.ReadAllText(filePath);
+                ServerApi.Logger.Debug($"[TemperatureMonitor] Sending temperature data to player {fromPlayer.PlayerName}, data size: {jsonContent.Length} bytes");
+                ServerApi.Network.GetChannel("temperaturemonitor")
+                    .SendPacket(new TemperatureDataResponse 
+                    { 
+                        Success = true, 
+                        JsonData = jsonContent 
+                    }, fromPlayer);
+            }
+            catch (Exception ex)
+            {
+                ServerApi.Logger.Error($"[TemperatureMonitor] Error reading temperature data: {ex.Message}");
+                ServerApi.Network.GetChannel("temperaturemonitor")
+                    .SendPacket(new TemperatureDataResponse { Success = false }, fromPlayer);
+            }
+        }
+
+        // Handler odpowiedzi z danymi temperatury od serwera
+        private void OnTemperatureDataResponse(TemperatureDataResponse message)
+        {
+            if (ClientApi == null || translation == null) return;
+            
+            ClientApi.Logger.Debug($"[TemperatureMonitor] Received temperature data response, success: {message.Success}");
+            
+            if (!message.Success)
+            {
+                ClientApi.ShowChatMessage(translation.Get("no_data"));
+                return;
+            }
+            
+            DisplayTemperatureData(message.JsonData);
+        }
+
+        // Nowa metoda do wyświetlania danych z otrzymanego JSON-a
+        private void DisplayTemperatureData(string jsonData)
+        {
+            if (ClientApi == null || translation == null) return;
+            
+            try
+            {
+                ClientApi.Logger.Debug($"[TemperatureMonitor] Parsing temperature data, size: {jsonData.Length} bytes");
+                JObject temperatureData = JObject.Parse(jsonData);
+                
+                // Wyświetl dane w bardziej czytelny sposób
+                ClientApi.ShowChatMessage(translation.Get("temperature_history") + ":");
+                
+                int recordCount = temperatureData.Count;
+                // ClientApi.ShowChatMessage($"Found {recordCount} temperature records");
+                
+                foreach (var prop in temperatureData.Properties())
+                {
+                    string date = prop.Name;
+                    JObject? tempObj = prop.Value as JObject;
+                    
+                    if (tempObj != null)
+                    {
+                        try
+                        {
+                            // Bezpieczniejsza metoda pobierania wartości
+                            if (tempObj.TryGetValue("min", out JToken? minToken) && 
+                                tempObj.TryGetValue("max", out JToken? maxToken))
+                            {
+                                if (minToken != null && maxToken != null)
+                                {
+                                    float min = (float)minToken.ToObject<double>();
+                                    float max = (float)maxToken.ToObject<double>();
+                                    
+                                    ClientApi.ShowChatMessage($"{date}: {translation.Get("min_temp")}: {min:F1}°C, {translation.Get("max_temp")}: {max:F1}°C");
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            ClientApi.ShowChatMessage(translation.Get("temperature_data_processing_error", date, ex.Message));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ClientApi.Logger.Error($"[TemperatureMonitor] Error parsing temperature data: {ex.Message}");
+                ClientApi.ShowChatMessage(translation.Get("reading_data_error", ex.Message));
+            }
+        }
+
         private void OnGameTick(float deltaTime)
         {
             if (this.ServerApi == null) return;
@@ -115,15 +245,15 @@ namespace TemperatureMonitor
             // Sprawdź czas w grze zamiast rzeczywistego
             double gameHours = this.ServerApi.World.Calendar.TotalHours;
             
-            // Zapisuj dane co pełną godzinę gry
-            if (Math.Floor(gameHours) > Math.Floor(lastCheckGameHour))
+            // Co 15 minut gry (4 razy na godzinę)
+            if (Math.Floor(gameHours * 4) > Math.Floor(lastCheckGameHour * 4))
             {
-                this.ServerApi.Logger.Notification($"[TemperatureMonitor] Nowa godzina w grze: {Math.Floor(gameHours)}");
+                this.ServerApi.Logger.Notification($"[TemperatureMonitor] Checking temperature at game hour: {gameHours:F1}");
                 lastCheckGameHour = gameHours;
                 CheckTemperatures();
             }
         }
- 
+
         private void CheckTemperatures()
         {
             if (this.ServerApi == null || config == null) return;
@@ -290,154 +420,51 @@ namespace TemperatureMonitor
         {
             try
             {
-                if (ClientApi == null || translation == null) return false;
+                if (ClientApi == null)
+                {
+                    Console.WriteLine("[TemperatureMonitor] Error: ClientApi is null");
+                    return false;
+                }
                 
-                ClientApi.Logger.Debug("[TemperatureMonitor] Alt+T pressed, showing temperature data");
+                if (translation == null)
+                {
+                    ClientApi.Logger.Error("[TemperatureMonitor] Error: translation is null");
+                    ClientApi.ShowChatMessage("Error: translation system not initialized");
+                    return false;
+                }
                 
-                // Wyświetl dane w oknie czatu
-                ShowTemperatureData();
+                ClientApi.Logger.Debug("[TemperatureMonitor] Alt+T pressed, checking network channel");
+                
+                var channel = ClientApi.Network.GetChannel("temperaturemonitor");
+                if (channel == null)
+                {
+                    ClientApi.Logger.Error("[TemperatureMonitor] Error: Network channel 'temperaturemonitor' not found");
+                    ClientApi.ShowChatMessage("Error: Network communication channel not available");
+                    return false;
+                }
+                
+                // ClientApi.ShowChatMessage(translation.Get("hotkey_detected"));
+                
+                ClientApi.Logger.Debug("[TemperatureMonitor] Sending temperature data request to server");
+                // Zamiast próbować czytać plik lokalnie, wysyłamy żądanie do serwera
+                channel.SendPacket(new TemperatureDataRequest());
                 
                 return true;
             }
             catch (Exception ex)
             {
-                ClientApi?.Logger.Error($"[TemperatureMonitor] Error: {ex.Message}\n{ex.StackTrace}");
                 if (ClientApi != null)
+                {
+                    ClientApi.Logger.Error($"[TemperatureMonitor] Error in OnToggleTemperatureDialog: {ex.Message}\n{ex.StackTrace}");
                     ClientApi.ShowChatMessage($"Error: {ex.Message}");
+                }
+                else
+                {
+                    Console.WriteLine($"[TemperatureMonitor] Critical error: {ex.Message}");
+                }
             }
             
             return false;
-        }
-
-        private void LoadSavedTemperatureData()
-        {
-            if (ServerApi == null || worldSpecificPath == null) return;
-            
-            string filePath = Path.Combine(worldSpecificPath, "TemperatureMonitorlog.json");
-            
-            if (File.Exists(filePath))
-            {
-                try
-                {
-                    string jsonContent = File.ReadAllText(filePath);
-                    if (string.IsNullOrWhiteSpace(jsonContent) || jsonContent == "{}")
-                    {
-                        ServerApi.Logger.Notification("[TemperatureMonitor] Plik danych jest pusty, brak poprzednich zapisów.");
-                        return;
-                    }
-                    
-                    JObject temperatureData = JObject.Parse(jsonContent);
-                    
-                    foreach (var prop in temperatureData.Properties())
-                    {
-                        string date = prop.Name;
-                        JObject? tempObj = prop.Value as JObject;
-                        
-                        if (tempObj != null && tempObj["min"] != null && tempObj["max"] != null)
-                        {
-                            if (tempObj.TryGetValue("min", out JToken? minToken) && 
-                                tempObj.TryGetValue("max", out JToken? maxToken))
-                            {
-                                if (minToken != null && maxToken != null && 
-                                    minToken.Type != JTokenType.Null && maxToken.Type != JTokenType.Null)
-                                {
-                                    // Używaj ToObject zamiast Value
-                                    float min = (float)minToken.ToObject<double>();
-                                    float max = (float)maxToken.ToObject<double>();
-                                    
-                                    minTemperatures[date] = min;
-                                    maxTemperatures[date] = max;
-                                }
-                            }
-                        }
-                    }
-                    
-                    ServerApi.Logger.Notification($"[TemperatureMonitor] Wczytano {minTemperatures.Count} zapisów temperatur z pliku.");
-                }
-                catch (Exception ex)
-                {
-                    ServerApi.Logger.Error($"[TemperatureMonitor] Błąd wczytywania zapisanych danych: {ex.Message}");
-                }
-            }
-        }
-
-        public override void Dispose()
-        {
-            // Upewnij się, że wszystkie dane są zapisane przy wyładowaniu moda
-            if (ServerApi != null && minTemperatures.Count > 0)
-            {
-                ServerApi.Logger.Notification($"[TemperatureMonitor] Zamykanie - zapisywanie {minTemperatures.Count} temperatur");
-                SaveTemperatureData();
-            }
-            
-            // Usuń lub zakomentuj tę linię
-            // temperatureDialog?.Dispose();
-            
-            base.Dispose();
-        }
-
-        private void ShowTemperatureData()
-        {
-            if (ClientApi == null || translation == null) return;
-            
-            // ClientApi.ShowChatMessage(translation.Get("hotkey_detected"));
-            
-            string worldId = ClientApi.World.SavegameIdentifier.ToString();
-            string jsonPath = Path.Combine(GamePaths.DataPath, "ModData", worldId, "temperaturemonitor", "TemperatureMonitorlog.json");
-            
-            // ClientApi.ShowChatMessage($"Looking for data at: {jsonPath}");
-            
-            if (File.Exists(jsonPath))
-            {
-                try {
-                    // ClientApi.ShowChatMessage("Data file found!");
-                    
-                    string jsonContent = File.ReadAllText(jsonPath);
-                    JObject temperatureData = JObject.Parse(jsonContent);
-                    
-                    // Wyświetl dane w bardziej czytelny sposób
-                    ClientApi.ShowChatMessage(translation.Get("temperature_history") + ":");
-                    
-                    int recordCount = temperatureData.Count;
-                    // ClientApi.ShowChatMessage($"Found {recordCount} temperature records");
-                    
-                    foreach (var prop in temperatureData.Properties())
-                    {
-                        string date = prop.Name;
-                        JObject? tempObj = prop.Value as JObject;
-                        
-                        if (tempObj != null)
-                        {
-                            try
-                            {
-                                // Bezpieczniejsza metoda pobierania wartości
-                                if (tempObj.TryGetValue("min", out JToken? minToken) && 
-                                    tempObj.TryGetValue("max", out JToken? maxToken))
-                                {
-                                    if (minToken != null && maxToken != null)
-                                    {
-                                        float min = (float)minToken.ToObject<double>();
-                                        float max = (float)maxToken.ToObject<double>();
-                                        
-                                        ClientApi.ShowChatMessage($"{date}: {translation.Get("min_temp")}: {min:F1}°C, {translation.Get("max_temp")}: {max:F1}°C");
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                ClientApi.ShowChatMessage(translation.Get("temperature_data_processing_error", date, ex.Message));
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex) {
-                    ClientApi.ShowChatMessage(translation.Get("reading_data_error", ex.Message));
-                }
-            }
-            else
-            {
-                ClientApi.ShowChatMessage(translation.Get("no_data"));
-            }
         }
 
         private void HandleTempSensorCommand(IServerPlayer player, int groupId, CmdArgs args)
@@ -512,5 +539,71 @@ namespace TemperatureMonitor
             }
         }
 
+        private void LoadSavedTemperatureData()
+        {
+            if (ServerApi == null || worldSpecificPath == null) return;
+            
+            string filePath = Path.Combine(worldSpecificPath, "TemperatureMonitorlog.json");
+            
+            if (File.Exists(filePath))
+            {
+                try
+                {
+                    string jsonContent = File.ReadAllText(filePath);
+                    if (string.IsNullOrWhiteSpace(jsonContent) || jsonContent == "{}")
+                    {
+                        ServerApi.Logger.Notification("[TemperatureMonitor] Plik danych jest pusty, brak poprzednich zapisów.");
+                        return;
+                    }
+                    
+                    JObject temperatureData = JObject.Parse(jsonContent);
+                    
+                    foreach (var prop in temperatureData.Properties())
+                    {
+                        string date = prop.Name;
+                        JObject? tempObj = prop.Value as JObject;
+                        
+                        if (tempObj != null && tempObj["min"] != null && tempObj["max"] != null)
+                        {
+                            if (tempObj.TryGetValue("min", out JToken? minToken) && 
+                                tempObj.TryGetValue("max", out JToken? maxToken))
+                            {
+                                if (minToken != null && maxToken != null && 
+                                    minToken.Type != JTokenType.Null && maxToken.Type != JTokenType.Null)
+                                {
+                                    // Używaj ToObject zamiast Value
+                                    float min = (float)minToken.ToObject<double>();
+                                    float max = (float)maxToken.ToObject<double>();
+                                    
+                                    minTemperatures[date] = min;
+                                    maxTemperatures[date] = max;
+                                }
+                            }
+                        }
+                    }
+                    
+                    ServerApi.Logger.Notification($"[TemperatureMonitor] Wczytano {minTemperatures.Count} zapisów temperatur z pliku.");
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[TemperatureMonitor] Błąd wczytywania zapisanych danych: {ex.Message}");
+                }
+            }
+        }
+
+        public override void Dispose()
+        {
+            // Upewnij się, że wszystkie dane są zapisane przy wyładowaniu moda
+            if (ServerApi != null && minTemperatures.Count > 0)
+            {
+                // Dodaj dodatkowy log
+                ServerApi.Logger.Notification($"[TemperatureMonitor] Zamykanie - zapisywanie {minTemperatures.Count} temperatur");
+                SaveTemperatureData();
+            }
+            
+            // temperatureDialog?.Dispose();
+            
+            base.Dispose();
+        }
      }
 }
