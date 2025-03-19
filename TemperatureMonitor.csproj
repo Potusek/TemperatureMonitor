@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net7.0</TargetFramework>
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+        <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+        <Nullable>enable</Nullable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <DebugType>embedded</DebugType>
+        <DebugSymbols>true</DebugSymbols>
+        <ExcludeGeneratedDebugSymbol>false</ExcludeGeneratedDebugSymbol>
+        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Reference Include="VintagestoryAPI" HintPath="$(VINTAGE_STORY)/VintagestoryAPI.dll" Private="false" />
+        <Reference Include="VSEssentials" HintPath="$(VINTAGE_STORY)/Mods/VSEssentials.dll" Private="false" />
+        <Reference Include="Newtonsoft.Json" HintPath="$(VINTAGE_STORY)/Lib/Newtonsoft.Json.dll" Private="false" />
+        <Reference Include="protobuf-net" HintPath="$(VINTAGE_STORY)/Lib/protobuf-net.dll" Private="false" />
+        <None Include="LICENSE;modicon.png" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="" Link="%(RecursiveDir)%(Filename)%(Extension)" />
+    </ItemGroup>
+  
+    <ItemGroup>
+      <None Include="modinfo.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+  
+    <ItemGroup>
+      <None Include="assets/**">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+    </ItemGroup>
+    <!-- <Target Name="CopyToMods" AfterTargets="Build">
+      <Copy SourceFiles="$(TargetPath)" DestinationFolder="E:\Vintagestory\Mods" />
+      <Copy SourceFiles="$(ProjectDir)/modinfo.json" DestinationFolder="E:\Vintagestory\Mods\tempmod" />
+    </Target> -->
+  
+    <Target Name="Package" AfterTargets="PostBuildEvent">
+        <ZipDirectory DestinationFile="bin/$(TargetName).zip" SourceDirectory="$(TargetDir)" Overwrite="true" />
+    </Target>
+
+  </Project>
