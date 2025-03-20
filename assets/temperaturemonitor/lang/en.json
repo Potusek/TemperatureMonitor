@@ -43,5 +43,19 @@
     "sensor_set_spawn": "Temperature sensor set to spawn point: ({0}, {1}, {2})",
     "sensor_set_location": "Temperature sensor set to your current location: ({0}, {1}, {2})",
     "sensor_not_configured": "Temperature sensor location is not properly configured.",
-    "command_unknown": "Unknown command. Available commands: /tempsensor setspawn, /tempsensor setcurrlocation"
+    "command_unknown": "Unknown command. Available commands: /tempsensor setspawn, /tempsensor setcurrlocation",
+    "day": "Day",
+    "year": "Year",
+    "month_1": "January",
+    "month_2": "February",
+    "month_3": "March",
+    "month_4": "April",
+    "month_5": "May",
+    "month_6": "June",
+    "month_7": "July",
+    "month_8": "August",
+    "month_9": "September",
+    "month_10": "October",
+    "month_11": "November",
+    "month_12": "December"
 }

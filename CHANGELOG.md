@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.9.2]- 2025-03-20
+### Fixed
+- Replace chat-based output with proper GUI window using ImGui
+- Implement hierarchical tree view for temperature data (years, months, days)
+- Display min/max temperatures at each hierarchy level
+- Fix data serialization and loading to prevent data loss
+- Improve chronological sorting of months and days
+- Add column headers for better readability
+- Update translations for GUI elements
+- Fix bugs in temperature data saving and loading logic
+
 ## [0.9.1] - 2025-03-19
 ### Fixed
 - Fixed client-server communication for multiplayer environments

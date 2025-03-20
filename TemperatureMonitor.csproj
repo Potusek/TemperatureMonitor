@@ -19,6 +19,8 @@
         <Reference Include="VSEssentials" HintPath="$(VINTAGE_STORY)/Mods/VSEssentials.dll" Private="false" />
         <Reference Include="Newtonsoft.Json" HintPath="$(VINTAGE_STORY)/Lib/Newtonsoft.Json.dll" Private="false" />
         <Reference Include="protobuf-net" HintPath="$(VINTAGE_STORY)/Lib/protobuf-net.dll" Private="false" />
+        <Reference Include="VSImGui" HintPath="$(VINTAGE_STORY)/VSImGui/VSImGui.dll" Private="false" />
+        <Reference Include="ImGui.NET" HintPath="$(VINTAGE_STORY)/VSImGui/ImGui.NET.dll" Private="false" />
         <None Include="LICENSE;modicon.png" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="" Link="%(RecursiveDir)%(Filename)%(Extension)" />
     </ItemGroup>
   
