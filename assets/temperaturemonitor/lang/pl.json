@@ -44,6 +44,7 @@
     "sensor_set_location": "Czujnik temperatury ustawiony na Twoją obecną lokalizację: ({0}, {1}, {2})",
     "sensor_not_configured": "Lokalizacja czujnika temperatury nie jest poprawnie skonfigurowana.",
     "command_unknown": "Nieznana komenda. Dostępne komendy: /tempsensor setspawn, /tempsensor setcurrlocation",
+    "days": "Dni",
     "day": "Dzień",
     "year": "Rok",
     "month_1": "Styczeń",
@@ -57,5 +58,17 @@
     "month_9": "Wrzesień",
     "month_10": "Październik",
     "month_11": "Listopad",
-    "month_12": "Grudzień"
+    "month_12": "Grudzień",
+    "month_short_1": "Sty",
+    "month_short_2": "Lut",
+    "month_short_3": "Mar",
+    "month_short_4": "Kwi",
+    "month_short_5": "Maj",
+    "month_short_6": "Cze",
+    "month_short_7": "Lip",
+    "month_short_8": "Sie",
+    "month_short_9": "Wrz",
+    "month_short_10": "Paz",
+    "month_short_11": "Lis",
+    "month_short_12": "Gru"
 }
