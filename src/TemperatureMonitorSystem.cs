@@ -10,6 +10,7 @@ using Newtonsoft.Json.Linq;
 using Vintagestory.API.MathTools;
 using Vintagestory.API.Common.Entities;
 using ProtoBuf;
+using System.Linq;
 
 namespace TemperatureMonitor
 {
@@ -37,7 +38,7 @@ namespace TemperatureMonitor
         
         string? worldSpecificPath;
         private Translation? translation;
-        // private GuiDialogTemperature? temperatureDialog;
+        private TemperatureImGuiDialog? temperatureImGuiDialog;
         public ICoreAPI? api;
         public ICoreClientAPI? ClientApi;
         public ICoreServerAPI? ServerApi;
@@ -72,6 +73,9 @@ namespace TemperatureMonitor
                 
                 // Pobierz język z ustawień klienta i zaktualizuj tłumaczenia
                 translation = new Translation(this.ClientApi, Lang.CurrentLocale);
+                
+                // Inicjalizacja interfejsu ImGui
+                temperatureImGuiDialog = new TemperatureImGuiDialog(api, translation);
                 
                 // Rejestracja kanału i wiadomości sieciowych
                 api.Logger.Debug("[TemperatureMonitor] Registering network channel");
@@ -183,7 +187,8 @@ namespace TemperatureMonitor
                 return;
             }
             
-            DisplayTemperatureData(message.JsonData);
+            // Zamiast wyświetlać dane w chacie, użyj interfejsu ImGui
+            temperatureImGuiDialog?.ShowDialog(message.JsonData);
         }
 
         // Nowa metoda do wyświetlania danych z otrzymanego JSON-a
@@ -328,15 +333,15 @@ namespace TemperatureMonitor
         {
             if (this.ServerApi == null) 
             {
-                // Dodaj log
                 if (api != null) api.Logger.Error("[TemperatureMonitor] SaveTemperatureData: ServerApi jest null!");
                 return;
             }
             
             try
             {
-                // Dodaj log o liczbie danych
                 this.ServerApi.Logger.Notification($"[TemperatureMonitor] Próba zapisania danych, liczba wpisów: {minTemperatures.Count}");
+                // Dodaj dokładniejsze informacje o zapisywanych danych
+                this.ServerApi.Logger.Debug($"[TemperatureMonitor] DEBUG: Zapisywane dni: {string.Join(", ", minTemperatures.Keys)}");
                 
                 // Nie zapisuj jeśli nie ma danych
                 if (minTemperatures.Count == 0)
@@ -345,36 +350,104 @@ namespace TemperatureMonitor
                     return;
                 }
                 
-                // Przygotuj obiekt JSON
+                // Przygotuj hierarchiczną strukturę JSON
                 var temperatureData = new JObject();
                 
                 foreach (var entry in minTemperatures)
                 {
                     string date = entry.Key;
-                    
-                    float minTemp = entry.Value;
-                    float maxTemp = maxTemperatures[date];
-                    
-                    // Jeśli już mamy wpis dla tej daty, wybierz bardziej ekstremalne wartości
-                    if (temperatureData.ContainsKey(date))
+                    // Format daty: Rok-Miesiąc-Dzień (np. 2-07-03)
+                    string[] dateParts = date.Split('-');
+                    if (dateParts.Length != 3) 
                     {
-                        JObject? existingData = temperatureData[date] as JObject;
-                        if (existingData != null)
-                        {
-                            // Bezpieczne pobieranie wartości z sprawdzeniem null
-                            float existingMin = existingData["min"]?.Value<float>() ?? float.MaxValue;
-                            float existingMax = existingData["max"]?.Value<float>() ?? float.MinValue;
-                            
-                            minTemp = Math.Min(minTemp, existingMin);
-                            maxTemp = Math.Max(maxTemp, existingMax);
-                        }
+                        this.ServerApi.Logger.Error($"[TemperatureMonitor] Nieprawidłowy format daty: {date}");
+                        continue;
                     }
                     
-                    temperatureData[date] = new JObject
+                    string year = dateParts[0];
+                    string month = dateParts[1];
+                    string day = dateParts[2].TrimStart('0'); // Usuwamy wiodące zera
+                    
+                    // Pobierz wartości temperatury
+                    float minTemp = entry.Value;
+                    float maxTemp = maxTemperatures.ContainsKey(date) ? maxTemperatures[date] : float.MinValue;
+                    
+                    // Upewnij się, że mamy obiekt roku
+                    if (!temperatureData.ContainsKey(year))
+                    {
+                        temperatureData[year] = new JObject
+                        {
+                            ["min"] = float.MaxValue,
+                            ["max"] = float.MinValue,
+                            ["months"] = new JObject()
+                        };
+                    }
+                    
+                    JObject? yearData = temperatureData[year] as JObject;
+                    if (yearData == null) 
+                    {
+                        this.ServerApi.Logger.Error($"[TemperatureMonitor] Nie można utworzyć obiektu roku: {year}");
+                        continue;
+                    }
+                    
+                    JObject? months = yearData["months"] as JObject;
+                    if (months == null) 
+                    {
+                        this.ServerApi.Logger.Error($"[TemperatureMonitor] Nie można utworzyć obiektu miesięcy dla roku: {year}");
+                        continue;
+                    }
+                    
+                    // Upewnij się, że mamy obiekt miesiąca
+                    if (!months.ContainsKey(month))
+                    {
+                        months[month] = new JObject
+                        {
+                            ["min"] = float.MaxValue,
+                            ["max"] = float.MinValue,
+                            ["days"] = new JObject()
+                        };
+                    }
+                    
+                    JObject? monthData = months[month] as JObject;
+                    if (monthData == null) 
+                    {
+                        this.ServerApi.Logger.Error($"[TemperatureMonitor] Nie można utworzyć obiektu miesiąca: {month}");
+                        continue;
+                    }
+                    
+                    JObject? days = monthData["days"] as JObject;
+                    if (days == null) 
+                    {
+                        this.ServerApi.Logger.Error($"[TemperatureMonitor] Nie można utworzyć obiektu dni dla miesiąca: {month}");
+                        continue;
+                    }
+                    
+                    // Dodaj dane dnia
+                    days[day] = new JObject
                     {
                         ["min"] = minTemp,
                         ["max"] = maxTemp
                     };
+                    
+                    // Aktualizuj min/max dla miesiąca
+                    JToken? monthMinToken = monthData["min"];
+                    JToken? monthMaxToken = monthData["max"];
+                    
+                    float monthMin = monthMinToken != null ? monthMinToken.Value<float>() : float.MaxValue;
+                    float monthMax = monthMaxToken != null ? monthMaxToken.Value<float>() : float.MinValue;
+                    
+                    if (minTemp < monthMin) monthData["min"] = minTemp;
+                    if (maxTemp > monthMax) monthData["max"] = maxTemp;
+                    
+                    // Aktualizuj min/max dla roku
+                    JToken? yearMinToken = yearData["min"];
+                    JToken? yearMaxToken = yearData["max"];
+                    
+                    float yearMin = yearMinToken != null ? yearMinToken.Value<float>() : float.MaxValue;
+                    float yearMax = yearMaxToken != null ? yearMaxToken.Value<float>() : float.MinValue;
+                    
+                    if (minTemp < yearMin) yearData["min"] = minTemp;
+                    if (maxTemp > yearMax) yearData["max"] = maxTemp;
                 }
                 
                 // Dodaj dodatkowy log dla ścieżki
@@ -390,15 +463,65 @@ namespace TemperatureMonitor
                     }
                     
                     string filePath = Path.Combine(worldSpecificPath, "TemperatureMonitorlog.json");
+                    
+                    // Utwórz kopię zapasową istniejącego pliku
+                    if (File.Exists(filePath))
+                    {
+                        string backupPath = filePath + ".bak";
+                        try
+                        {
+                            File.Copy(filePath, backupPath, true);
+                            this.ServerApi.Logger.Debug($"[TemperatureMonitor] Utworzono kopię zapasową: {backupPath}");
+                        }
+                        catch (Exception ex)
+                        {
+                            this.ServerApi.Logger.Error($"[TemperatureMonitor] Błąd tworzenia kopii zapasowej: {ex.Message}");
+                        }
+                    }
+                    
                     this.ServerApi.Logger.Notification($"[TemperatureMonitor] Zapisywanie do pliku: {filePath}");
                     
-                    // Zapisz dane
-                    File.WriteAllText(filePath, temperatureData.ToString(Formatting.Indented));
+                    // Zapisz dane do tymczasowego pliku
+                    string tempFilePath = filePath + ".tmp";
+                    File.WriteAllText(tempFilePath, temperatureData.ToString(Formatting.Indented));
+                    
+                    // Sprawdź czy tymczasowy plik istnieje i ma zawartość
+                    if (File.Exists(tempFilePath) && new FileInfo(tempFilePath).Length > 0)
+                    {
+                        // Sprawdź poprawność JSON w tymczasowym pliku
+                        try
+                        {
+                            string tempContent = File.ReadAllText(tempFilePath);
+                            JObject.Parse(tempContent); // Sprawdź czy można sparsować
+                            
+                            // Jeśli parsowanie się powiodło, przenieś plik na właściwe miejsce
+                            if (File.Exists(filePath))
+                            {
+                                File.Delete(filePath);
+                            }
+                            File.Move(tempFilePath, filePath);
+                            
+                            this.ServerApi.Logger.Notification($"[TemperatureMonitor] Plik został pomyślnie zapisany.");
+                            
+                            // Zaloguj fragment zapisanych danych
+                            string savedContent = File.ReadAllText(filePath);
+                            this.ServerApi.Logger.Debug($"[TemperatureMonitor] Rozmiar zapisanych danych: {savedContent.Length} bajtów.");
+                        }
+                        catch (Exception ex)
+                        {
+                            this.ServerApi.Logger.Error($"[TemperatureMonitor] Błąd weryfikacji JSON: {ex.Message}");
+                        }
+                    }
+                    else
+                    {
+                        this.ServerApi.Logger.Error($"[TemperatureMonitor] BŁĄD: Tymczasowy plik nie istnieje lub jest pusty!");
+                    }
                     
                     // Sprawdź czy plik istnieje po zapisie
                     if (File.Exists(filePath))
                     {
-                        this.ServerApi.Logger.Notification($"[TemperatureMonitor] Plik został pomyślnie zapisany.");
+                        FileInfo fi = new FileInfo(filePath);
+                        this.ServerApi.Logger.Notification($"[TemperatureMonitor] Plik został pomyślnie zapisany. Rozmiar: {fi.Length} bajtów");
                     }
                     else
                     {
@@ -557,32 +680,74 @@ namespace TemperatureMonitor
                     }
                     
                     JObject temperatureData = JObject.Parse(jsonContent);
+                    ServerApi.Logger.Debug($"[TemperatureMonitor] Wczytano plik JSON, struktura główna zawiera {temperatureData.Count} elementów");
                     
-                    foreach (var prop in temperatureData.Properties())
+                    // Iteracja po latach
+                    foreach (var yearProp in temperatureData.Properties())
                     {
-                        string date = prop.Name;
-                        JObject? tempObj = prop.Value as JObject;
+                        string year = yearProp.Name;
+                        JObject? yearObj = yearProp.Value as JObject;
                         
-                        if (tempObj != null && tempObj["min"] != null && tempObj["max"] != null)
+                        if (yearObj == null) continue;
+                        
+                        // Iteracja po miesiącach
+                        JObject? months = yearObj["months"] as JObject;
+                        if (months != null)
                         {
-                            if (tempObj.TryGetValue("min", out JToken? minToken) && 
-                                tempObj.TryGetValue("max", out JToken? maxToken))
+                            ServerApi.Logger.Debug($"[TemperatureMonitor] Rok {year} zawiera {months.Count} miesięcy");
+                            
+                            foreach (var monthProp in months.Properties())
                             {
-                                if (minToken != null && maxToken != null && 
-                                    minToken.Type != JTokenType.Null && maxToken.Type != JTokenType.Null)
+                                string month = monthProp.Name;
+                                JObject? monthObj = monthProp.Value as JObject;
+                                
+                                if (monthObj == null) continue;
+                                
+                                // Iteracja po dniach
+                                JObject? days = monthObj["days"] as JObject;
+                                if (days != null)
                                 {
-                                    // Używaj ToObject zamiast Value
-                                    float min = (float)minToken.ToObject<double>();
-                                    float max = (float)maxToken.ToObject<double>();
+                                    ServerApi.Logger.Debug($"[TemperatureMonitor] Miesiąc {month} roku {year} zawiera {days.Count} dni");
                                     
-                                    minTemperatures[date] = min;
-                                    maxTemperatures[date] = max;
+                                    foreach (var dayProp in days.Properties())
+                                    {
+                                        string day = dayProp.Name;
+                                        JObject? dayObj = dayProp.Value as JObject;
+                                        
+                                        if (dayObj == null) continue;
+                                        
+                                        // Formatuj datę jako "rok-miesiąc-dzień"
+                                        string formattedDate = $"{year}-{month}-{day.PadLeft(2, '0')}";
+                                        
+                                        if (dayObj.TryGetValue("min", out JToken? minToken) && 
+                                            dayObj.TryGetValue("max", out JToken? maxToken))
+                                        {
+                                            if (minToken != null && maxToken != null && 
+                                                minToken.Type != JTokenType.Null && maxToken.Type != JTokenType.Null)
+                                            {
+                                                float min = (float)minToken.ToObject<double>();
+                                                float max = (float)maxToken.ToObject<double>();
+                                                
+                                                minTemperatures[formattedDate] = min;
+                                                maxTemperatures[formattedDate] = max;
+                                                
+                                                ServerApi.Logger.Debug($"[TemperatureMonitor] Wczytano temperaturę dla {formattedDate}: min={min:F1}°C, max={max:F1}°C");
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                     
                     ServerApi.Logger.Notification($"[TemperatureMonitor] Wczytano {minTemperatures.Count} zapisów temperatur z pliku.");
+                    if (minTemperatures.Count > 0)
+                    {
+                        var keysArray = minTemperatures.Keys.ToArray();
+                        string keysToShow = string.Join(", ", keysArray.Length > 10 ? keysArray.Take(10) : keysArray);
+                        ServerApi.Logger.Debug($"[TemperatureMonitor] Wczytane daty: {keysToShow}" + 
+                            (keysArray.Length > 10 ? $" i {keysArray.Length - 10} więcej..." : ""));
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -590,7 +755,7 @@ namespace TemperatureMonitor
                 }
             }
         }
-
+        
         public override void Dispose()
         {
             // Upewnij się, że wszystkie dane są zapisane przy wyładowaniu moda
@@ -601,7 +766,8 @@ namespace TemperatureMonitor
                 SaveTemperatureData();
             }
             
-            // temperatureDialog?.Dispose();
+            // Zwolnij zasoby interfejsu ImGui
+            temperatureImGuiDialog?.Dispose();
             
             base.Dispose();
         }

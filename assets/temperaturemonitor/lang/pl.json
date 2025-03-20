@@ -43,5 +43,19 @@
     "sensor_set_spawn": "Czujnik temperatury ustawiony na punkt odrodzenia: ({0}, {1}, {2})",
     "sensor_set_location": "Czujnik temperatury ustawiony na Twoją obecną lokalizację: ({0}, {1}, {2})",
     "sensor_not_configured": "Lokalizacja czujnika temperatury nie jest poprawnie skonfigurowana.",
-    "command_unknown": "Nieznana komenda. Dostępne komendy: /tempsensor setspawn, /tempsensor setcurrlocation"
+    "command_unknown": "Nieznana komenda. Dostępne komendy: /tempsensor setspawn, /tempsensor setcurrlocation",
+    "day": "Dzień",
+    "year": "Rok",
+    "month_1": "Styczeń",
+    "month_2": "Luty",
+    "month_3": "Marzec",
+    "month_4": "Kwiecień",
+    "month_5": "Maj",
+    "month_6": "Czerwiec",
+    "month_7": "Lipiec",
+    "month_8": "Sierpień",
+    "month_9": "Wrzesień",
+    "month_10": "Październik",
+    "month_11": "Listopad",
+    "month_12": "Grudzień"
 }
