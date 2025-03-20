@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.9.3] - 2025-03-21
+### Improved
+- Enhanced ImGui interface with better layout and styling
+- Fixed issues with displaying Polish characters by using short month names
+- Improved temperature value alignment in the temperature history view
+- Added alternating row colors for better readability in daily temperature data
+- Fixed visual bugs when expanding/collapsing year and month sections
+- Updated translation files to include short month names
+- Optimized column widths and element spacing for more consistent display
+
 ## [0.9.2]- 2025-03-20
 ### Fixed
 - Replace chat-based output with proper GUI window using ImGui

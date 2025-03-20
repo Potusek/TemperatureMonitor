@@ -10,6 +10,7 @@ using VSImGui;
 using VSImGui.API;
 using System.Linq; // Dla OrderBy itp.
 using System.Text;
+using System.Numerics;
 
 namespace TemperatureMonitor
 {
@@ -51,12 +52,12 @@ namespace TemperatureMonitor
             if (!showWindow) return CallbackGUIStatus.Closed;
             
             // Ustaw rozmiar okna przy pierwszym użyciu
-            ImGui.SetNextWindowSize(new System.Numerics.Vector2(500, 400), ImGuiCond.FirstUseEver);
+            ImGui.SetNextWindowSize(new Vector2(500, 300), ImGuiCond.FirstUseEver);
             
             // Wycentruj okno przy pierwszym użyciu
             var displaySize = ImGui.GetIO().DisplaySize;
-            var windowSize = new System.Numerics.Vector2(500, 400);
-            var windowPos = new System.Numerics.Vector2(
+            var windowSize = new Vector2(500, 300);
+            var windowPos = new Vector2(
                 (displaySize.X - windowSize.X) * 0.5f,
                 (displaySize.Y - windowSize.Y) * 0.5f
             );
@@ -80,160 +81,189 @@ namespace TemperatureMonitor
             }
             
             // Powiększenie nagłówka
-            float headerScale = 1.5f;
+            float headerScale = 1.8f;
             ImGui.SetWindowFontScale(headerScale);
             ImGui.Text(translation.Get("temperature_history_days"));
+            ImGui.SetWindowFontScale(1.5f);
             
-            float labelScale = 1.2f; // Mniejsza niż nagłówek główny (1.5f)
-            ImGui.SetWindowFontScale(labelScale);
-            ImGui.Columns(3);
+            // Pasek separatora po nagłówku
+            ImGui.Separator();
+            ImGui.Spacing();
+            
+            // Nagłówki kolumn w jednej linii
+            ImGui.Columns(3, "mainColumns", false);
+            ImGui.SetColumnWidth(0, 380); // Kolumna z nazwami
+            ImGui.SetColumnWidth(1, 150); // Kolumna Min
+            ImGui.SetColumnWidth(2, 150); // Kolumna Max
+            
             ImGui.Text(""); ImGui.NextColumn();
             ImGui.Text(translation.Get("min_temp")); ImGui.NextColumn();
             ImGui.Text(translation.Get("max_temp")); ImGui.NextColumn();
-
-            ImGui.SetWindowFontScale(1.0f);
-            
             ImGui.Separator();
             
-            // Ustawienie większej czcionki dla danych
-            float dataScale = 1.35f;
-            
-            // Sortowanie lat
-            var yearProps = temperatureData.Properties().ToList();
-            yearProps.Sort((a, b) => string.Compare(b.Name, a.Name)); // Sortowanie malejące
+            // Sortowanie lat malejąco
+            var yearProps = temperatureData.Properties()
+                .OrderByDescending(p => int.Parse(p.Name))
+                .ToList();
             
             // Iteracja po latach
             foreach (var yearProp in yearProps)
             {
                 string year = yearProp.Name;
                 JObject? yearData = yearProp.Value as JObject;
-                
                 if (yearData == null) continue;
                 
                 // Pobranie min/max dla roku
-                JToken? minToken = yearData["min"];
-                JToken? maxToken = yearData["max"];
+                float yearMin = yearData["min"]?.Value<float>() ?? float.NaN;
+                float yearMax = yearData["max"]?.Value<float>() ?? float.NaN;
                 
-                float yearMin = minToken != null ? minToken.Value<float>() : float.NaN;
-                float yearMax = maxToken != null ? maxToken.Value<float>() : float.NaN;
+                // Nagłówek roku
+                bool yearOpen = false;
+                ImGui.PushStyleColor(ImGuiCol.Header, new Vector4(0.25f, 0.25f, 0.4f, 1.0f)); // Lekko niebieskawe tło dla roku
                 
-                // Nagłówek roku z wartościami min/max w formie bardziej kompaktowej
-                ImGui.SetWindowFontScale(dataScale);
+                ImGui.Columns(3, $"year_{year}", false); 
+                ImGui.SetColumnWidth(0, 380);
+                ImGui.SetColumnWidth(1, 150);
+                ImGui.SetColumnWidth(2, 150);
                 
-                // Wyświetl rok i jego temperatury - w jednej linii
-                ImGui.Columns(3);
-                bool yearOpen = ImGui.TreeNode($"{translation.Get("year")} {year}###{year}");
+                yearOpen = ImGui.TreeNodeEx($"{translation.Get("year")} {year}", ImGuiTreeNodeFlags.DefaultOpen);
                 ImGui.NextColumn();
-                ImGui.Text($"{yearMin:F1}°C");
+                ImGui.Text(string.Format("{0,18}",$"{yearMin:F1}°C"));
+                // ImGui.Text($"{yearMin:F1}°C");
                 ImGui.NextColumn();
-                ImGui.Text($"{yearMax:F1}°C");
+                ImGui.Text(string.Format("{0,18}",$"{yearMax:F1}°C"));
+                // ImGui.Text($"{yearMax:F1}°C");
                 ImGui.NextColumn();
-                ImGui.Columns(1);
                 
-                ImGui.SetWindowFontScale(1.0f);
+                ImGui.PopStyleColor();
                 
-                // Wyświetl miesiące, jeśli rok jest rozwinięty
                 if (yearOpen)
                 {
-                    // Iteracja po miesiącach
                     JObject? months = yearData["months"] as JObject;
                     if (months != null)
                     {
                         // Sortowanie miesięcy
-                        var monthProps = months.Properties().ToList();
-                        monthProps.Sort((a, b) => int.Parse(b.Name).CompareTo(int.Parse(a.Name))); // Sortowanie malejące numeryczne
+                        var monthProps = months.Properties()
+                            .OrderBy(p => int.Parse(p.Name))
+                            .ToList();
                         
-                        // Nagłówki
-                        ImGui.Indent(20.0f); // Wcięcie dla miesięcy
-                        
+                        // Iteracja po miesiącach
                         foreach (var monthProp in monthProps)
                         {
                             string month = monthProp.Name;
                             JObject? monthData = monthProp.Value as JObject;
-                            
                             if (monthData == null) continue;
                             
                             // Pobranie min/max dla miesiąca
-                            minToken = monthData["min"];
-                            maxToken = monthData["max"];
+                            float monthMin = monthData["min"]?.Value<float>() ?? float.NaN;
+                            float monthMax = monthData["max"]?.Value<float>() ?? float.NaN;
                             
-                            float monthMin = minToken != null ? minToken.Value<float>() : float.NaN;
-                            float monthMax = maxToken != null ? maxToken.Value<float>() : float.NaN;
+                            // Nazwa miesiąca (skrót)
+                            string monthName = translation.Get($"month_short_{int.Parse(month)}");
                             
-                            // Nazwa miesiąca
-                            string monthName = translation.Get($"month_{int.Parse(month)}");
+                            // Subtelne tło dla miesiąca
+                            ImGui.PushStyleColor(ImGuiCol.Header, new Vector4(0.2f, 0.3f, 0.2f, 1.0f)); // Lekko zielonkawe tło
                             
-                            // Wyświetl miesiąc i jego temperatury - w jednej linii
-                            ImGui.SetWindowFontScale(dataScale);
-                            ImGui.Columns(3);
-                            bool monthOpen = ImGui.TreeNode($"{monthName}###{year}-{month}");
+                            ImGui.Columns(3, $"month_{year}_{month}", false);
+                            ImGui.SetColumnWidth(0, 380);
+                            ImGui.SetColumnWidth(1, 150);
+                            ImGui.SetColumnWidth(2, 150);
+                            
+                            // Wcięcie dla miesięcy
+                            ImGui.Indent(10);
+                            bool monthOpen = ImGui.TreeNodeEx(monthName, ImGuiTreeNodeFlags.DefaultOpen);
+                            ImGui.Unindent(10);
                             ImGui.NextColumn();
-                            ImGui.Text($"{monthMin:F1}°C");
+                            ImGui.Text(string.Format("{0,18}",$"{monthMin:F1}°C"));
+                            // ImGui.Text($"{monthMin:F1}°C");
                             ImGui.NextColumn();
-                            ImGui.Text($"{monthMax:F1}°C");
+                            ImGui.Text(string.Format("{0,18}",$"{monthMax:F1}°C"));
+                            // ImGui.Text($"{monthMax:F1}°C");
                             ImGui.NextColumn();
-                            ImGui.Columns(1);
-                            ImGui.SetWindowFontScale(1.0f);
                             
-                            // Wyświetl dni, jeśli miesiąc jest rozwinięty
+                            ImGui.PopStyleColor();
+                            
                             if (monthOpen)
                             {
-                                // Iteracja po dniach
                                 JObject? days = monthData["days"] as JObject;
                                 if (days != null)
                                 {
-                                    // Nagłówki tabeli dla dni
-                                    ImGui.Indent(20.0f); // Wcięcie dla dni
-                                    ImGui.Columns(3, "days_table", true);
-                                    ImGui.Text("Dzien");
+                                    // Nagłówek dla dni
+                                    ImGui.Columns(3, $"days_header_{year}_{month}", false);
+                                    ImGui.SetColumnWidth(0, 380);
+                                    ImGui.SetColumnWidth(1, 150);
+                                    ImGui.SetColumnWidth(2, 150);
+                                    
+                                    ImGui.Indent(20);
+                                    ImGui.Text(translation.Get("days"));
+                                    ImGui.Unindent(20);
                                     ImGui.NextColumn();
                                     ImGui.Text(translation.Get("min_temp"));
                                     ImGui.NextColumn();
                                     ImGui.Text(translation.Get("max_temp"));
                                     ImGui.NextColumn();
+                                    
                                     ImGui.Separator();
                                     
                                     // Sortowanie dni
-                                    var dayProps = days.Properties().ToList();
-                                    dayProps.Sort((a, b) => int.Parse(b.Name).CompareTo(int.Parse(a.Name))); // Sortowanie malejące
+                                    var dayProps = days.Properties()
+                                        .OrderBy(p => int.Parse(p.Name))
+                                        .ToList();
                                     
-                                    ImGui.SetWindowFontScale(dataScale);
+                                    // Alternatywne kolorowanie wierszy dla dni
+                                    bool altRow = false;
+                                    
                                     foreach (var dayProp in dayProps)
                                     {
                                         string day = dayProp.Name;
                                         JObject? dayData = dayProp.Value as JObject;
-                                        
                                         if (dayData == null) continue;
                                         
-                                        minToken = dayData["min"];
-                                        maxToken = dayData["max"];
+                                        float dayMin = dayData["min"]?.Value<float>() ?? float.NaN;
+                                        float dayMax = dayData["max"]?.Value<float>() ?? float.NaN;
                                         
-                                        float dayMin = minToken != null ? minToken.Value<float>() : float.NaN;
-                                        float dayMax = maxToken != null ? maxToken.Value<float>() : float.NaN;
+                                        // Subtelne alternatywne kolorowanie wierszy
+                                        if (altRow)
+                                            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.9f, 0.9f, 0.9f, 1.0f));
+                                        else
+                                            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.8f, 0.8f, 0.8f, 1.0f));
                                         
+                                        ImGui.Columns(3, $"day_{year}_{month}_{day}", false);
+                                        ImGui.SetColumnWidth(0, 380);
+                                        ImGui.SetColumnWidth(1, 150);
+                                        ImGui.SetColumnWidth(2, 150);
+                                        
+                                        ImGui.Indent(20);
                                         ImGui.Text(day);
+                                        ImGui.Unindent(20);
                                         ImGui.NextColumn();
-                                        ImGui.Text($"{dayMin:F1}°C");
+                                        ImGui.Text(string.Format("{0,18}",$"{dayMin:F1}°C"));
+                                        // ImGui.Text($"{dayMin:F1}°C");
                                         ImGui.NextColumn();
-                                        ImGui.Text($"{dayMax:F1}°C");
+                                        ImGui.Text(string.Format("{0,18}",$"{dayMax:F1}°C"));
+                                        // ImGui.Text($"{dayMax:F1}°C");
                                         ImGui.NextColumn();
+                                        
+                                        ImGui.PopStyleColor();
+                                        altRow = !altRow;
                                     }
-                                    ImGui.SetWindowFontScale(1.0f);
                                     
-                                    ImGui.Columns(1);
-                                    ImGui.Unindent(20.0f); // Cofnij wcięcie dla dni
+                                    ImGui.Spacing();
+                                    ImGui.TreePop();
                                 }
-                                
-                                ImGui.TreePop();
                             }
                         }
-                        
-                        ImGui.Unindent(20.0f); // Cofnij wcięcie dla miesięcy
                     }
                     
                     ImGui.TreePop();
                 }
+                
+                // Dodaj odstęp między latami
+                ImGui.Spacing();
             }
+            
+            // Resetuj kolumny na końcu
+            ImGui.Columns(1);
         }
         
         public void Dispose()
