@@ -120,13 +120,12 @@ namespace TemperatureMonitor
             // Dodajemy log przed rejestracją komendy
             api.Logger.Debug("[TemperatureMonitor] Trying to register command 'tempsensor'");
             
-            // Ignorujemy ostrzeżenie o przestarzałości i używamy podstawowej metody
             #pragma warning disable CS0618 // Wyłączamy ostrzeżenie o przestarzałości
             api.RegisterCommand("tempsensor", "Temperature sensor location commands", "[setspawn|setcurrlocation]", 
                 (IServerPlayer player, int groupId, CmdArgs args) => {
                     api.Logger.Debug("[TemperatureMonitor] Command 'tempsensor' called by " + player.PlayerName);
                     HandleTempSensorCommand(player, groupId, args);
-                }, "chat"); // Dodajemy podstawowe uprawnienie "chat"
+                }, "chat"); // Zmieniamy uprawnienie z "chat" na "admin"
             #pragma warning restore CS0618 // Włączamy z powrotem ostrzeżenie
             
             // Dodajemy log po rejestracji komendy
@@ -596,13 +595,24 @@ namespace TemperatureMonitor
             
             if (args.Length == 0)
             {
-                // Wyświetl aktualną lokalizację sensora
+                // Wyświetl aktualną lokalizację sensora - może to zrobić każdy
                 ShowSensorLocation(player, groupId);
                 return;
             }
 
             string subCommand = args[0].ToLowerInvariant();
             
+            // Sprawdź czy gracz jest administratorem przed zmianą lokalizacji
+            bool isAdmin = player.Role.Code.Equals("admin", StringComparison.InvariantCultureIgnoreCase) || 
+                        player.Role.Code.Equals("owner", StringComparison.InvariantCultureIgnoreCase);
+            
+            if (!isAdmin)
+            {
+                player.SendMessage(groupId, translation.Get("no_permission_sensor"), EnumChatType.CommandError);
+                return;
+            }
+            
+            // Tylko administratorzy dojdą do tego miejsca w kodzie
             switch (subCommand)
             {
                 case "setspawn":
@@ -647,18 +657,23 @@ namespace TemperatureMonitor
             if (player == null || config == null || ServerApi == null || translation == null) 
                 return;
             
+            // Ustal, czy gracz ma uprawnienia administratora
+            bool hasPermission = player.Role.Code.Equals("admin", StringComparison.InvariantCultureIgnoreCase) || 
+                                player.Role.Code.Equals("owner", StringComparison.InvariantCultureIgnoreCase);
+            string adminNote = hasPermission ? "" : translation.Get("sensor_admin_note");
+            
             if (config.UseSpawnPoint)
             {
                 EntityPos spawnPos = ServerApi.World.DefaultSpawnPosition;
-                player.SendMessage(groupId, translation.Get("sensor_current_spawn", (int)spawnPos.X, (int)spawnPos.Y, (int)spawnPos.Z), EnumChatType.Notification);
+                player.SendMessage(groupId, translation.Get("sensor_current_spawn", (int)spawnPos.X, (int)spawnPos.Y, (int)spawnPos.Z) + adminNote, EnumChatType.Notification);
             }
             else if (config.MeasurementX.HasValue && config.MeasurementY.HasValue && config.MeasurementZ.HasValue)
             {
-                player.SendMessage(groupId, translation.Get("sensor_current_location", config.MeasurementX, config.MeasurementY, config.MeasurementZ), EnumChatType.Notification);
+                player.SendMessage(groupId, translation.Get("sensor_current_location", config.MeasurementX, config.MeasurementY, config.MeasurementZ) + adminNote, EnumChatType.Notification);
             }
             else
             {
-                player.SendMessage(groupId, translation.Get("sensor_not_configured"), EnumChatType.Notification);
+                player.SendMessage(groupId, translation.Get("sensor_not_configured") + adminNote, EnumChatType.Notification);
             }
         }
 

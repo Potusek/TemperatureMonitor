@@ -30,7 +30,7 @@ namespace TemperatureMonitor
                 return key;
             }
             
-            api.Logger.Debug($"[TemperatureMonitor] Translation found for '{key}': '{translated}'");
+            // api.Logger.Debug($"[TemperatureMonitor] Translation found for '{key}': '{translated}'");
             
             // Jeśli mamy argumenty do formatowania
             if (args != null && args.Length > 0)

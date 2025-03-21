@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.4] - 2025-03-21
+### Security
+- Added admin-only restrictions for temperature sensor location changes
+- Regular players can now view but not modify sensor location
+- Improved feedback messages related to sensor permissions
+- Added informative notes about required permissions in command responses
+
 ## [0.9.3] - 2025-03-21
 ### Improved
 - Enhanced ImGui interface with better layout and styling
