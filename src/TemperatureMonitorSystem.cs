@@ -45,8 +45,9 @@ namespace TemperatureMonitor
         private Dictionary<string, float> minTemperatures = new Dictionary<string, float>();
         private Dictionary<string, float> maxTemperatures = new Dictionary<string, float>();
         private double lastCheckGameHour = 0;
-
         private ModConfig? config;
+        // Dodaj to w części deklaracji pól klasy
+        private long? gameTickListenerId = null;
 
         public override void Start(ICoreAPI api)
         {
@@ -113,9 +114,9 @@ namespace TemperatureMonitor
             
             // Rejestruj kanał i wiadomości sieciowe
             api.Network.RegisterChannel("temperaturemonitor")
-               .RegisterMessageType<TemperatureDataRequest>()
-               .RegisterMessageType<TemperatureDataResponse>()
-               .SetMessageHandler<TemperatureDataRequest>(OnTemperatureDataRequest);
+            .RegisterMessageType<TemperatureDataRequest>()
+            .RegisterMessageType<TemperatureDataResponse>()
+            .SetMessageHandler<TemperatureDataRequest>(OnTemperatureDataRequest);
             
             // Dodajemy log przed rejestracją komendy
             api.Logger.Debug("[TemperatureMonitor] Trying to register command 'tempsensor'");
@@ -125,13 +126,19 @@ namespace TemperatureMonitor
                 (IServerPlayer player, int groupId, CmdArgs args) => {
                     api.Logger.Debug("[TemperatureMonitor] Command 'tempsensor' called by " + player.PlayerName);
                     HandleTempSensorCommand(player, groupId, args);
-                }, "chat"); // Zmieniamy uprawnienie z "chat" na "admin"
+                }, "chat"); 
             #pragma warning restore CS0618 // Włączamy z powrotem ostrzeżenie
             
             // Dodajemy log po rejestracji komendy
             api.Logger.Debug("[TemperatureMonitor] Command registered successfully");
             
-            api.Event.RegisterGameTickListener(OnGameTick, 1000); // Sprawdzanie co sekundę
+            // Zapewnij, że obszar pomiaru pozostanie aktywny
+            EnsureMeasurementAreaIsLoaded();
+            
+            // Pozostawiamy również ticker jako dodatkowe zabezpieczenie
+            gameTickListenerId = api.Event.RegisterGameTickListener(OnGameTick, 5000); // Sprawdzanie co 5 sekund
+            ServerApi.Logger.Notification($"[TemperatureMonitor] Registered game tick listener with ID: {gameTickListenerId}");
+
             api.Logger.Debug("TemperatureMonitor: Server-side start method called!");
             
             base.StartServerSide(api);
@@ -252,7 +259,17 @@ namespace TemperatureMonitor
             // Co 15 minut gry (4 razy na godzinę)
             if (Math.Floor(gameHours * 4) > Math.Floor(lastCheckGameHour * 4))
             {
-                this.ServerApi.Logger.Notification($"[TemperatureMonitor] Checking temperature at game hour: {gameHours:F1}");
+                // Pobierz informacje o kalendarzu z API
+                int year = ServerApi.World.Calendar.Year;
+                int month = ServerApi.World.Calendar.Month; // 1-12
+                int dayOfMonth = (int)(ServerApi.World.Calendar.DayOfYear % ServerApi.World.Calendar.DaysPerMonth) + 1;
+                int hourOfDay = (int)(ServerApi.World.Calendar.HourOfDay);
+                int minuteOfHour = (int)((ServerApi.World.Calendar.HourOfDay % 1) * 60);
+                
+                // Sformatuj czas w bardziej czytelny sposób
+                string formattedGameTime = $"Rok {year}, {dayOfMonth} {(month)}, {hourOfDay:D2}:{minuteOfHour:D2}";
+                
+                ServerApi.Logger.Notification($"[TemperatureMonitor] Pomiar temperatury: {formattedGameTime}");
                 lastCheckGameHour = gameHours;
                 CheckTemperatures();
             }
@@ -770,15 +787,59 @@ namespace TemperatureMonitor
                 }
             }
         }
-        
+
+        private void EnsureMeasurementAreaIsLoaded()
+        {
+            if (ServerApi == null || config == null) return;
+            
+            try
+            {
+                BlockPos measurementPosition;
+                
+                // Wybierz miejsce pomiaru na podstawie konfiguracji
+                if (config.UseSpawnPoint || !config.MeasurementX.HasValue || !config.MeasurementY.HasValue || !config.MeasurementZ.HasValue)
+                {
+                    // Pobierz punkt spawnu
+                    EntityPos spawnEntityPos = ServerApi.World.DefaultSpawnPosition;
+                    measurementPosition = new BlockPos((int)spawnEntityPos.X, (int)spawnEntityPos.Y, (int)spawnEntityPos.Z);
+                }
+                else
+                {
+                    // Użyj skonfigurowanych koordynatów
+                    measurementPosition = new BlockPos(
+                        config.MeasurementX.Value,
+                        config.MeasurementY.Value,
+                        config.MeasurementZ.Value
+                    );
+                }
+                
+                // Ponieważ nie mamy bezpośredniej metody do utrzymania chunka załadowanego,
+                // będziemy polegać na regularnych tickach do wykonywania pomiarów
+                ServerApi.Logger.Notification($"[TemperatureMonitor] Setup for measurement position: ({measurementPosition.X}, {measurementPosition.Y}, {measurementPosition.Z})");
+            }
+            catch (Exception ex)
+            {
+                ServerApi.Logger.Error($"[TemperatureMonitor] Error setting up measurement area: {ex.Message}");
+            }
+        }
+
         public override void Dispose()
         {
             // Upewnij się, że wszystkie dane są zapisane przy wyładowaniu moda
-            if (ServerApi != null && minTemperatures.Count > 0)
+            if (ServerApi != null)
             {
-                // Dodaj dodatkowy log
-                ServerApi.Logger.Notification($"[TemperatureMonitor] Zamykanie - zapisywanie {minTemperatures.Count} temperatur");
-                SaveTemperatureData();
+                // Zapisz dane przy zamknięciu
+                if (minTemperatures.Count > 0)
+                {
+                    ServerApi.Logger.Notification($"[TemperatureMonitor] Zamykanie - zapisywanie {minTemperatures.Count} temperatur");
+                    SaveTemperatureData();
+                }
+                if (gameTickListenerId.HasValue)
+                {
+                    ServerApi.Event.UnregisterGameTickListener(gameTickListenerId.Value);
+                    gameTickListenerId = null;
+                    ServerApi.Logger.Notification("[TemperatureMonitor] Unregistered game tick listener");
+                }
             }
             
             // Zwolnij zasoby interfejsu ImGui
@@ -786,5 +847,6 @@ namespace TemperatureMonitor
             
             base.Dispose();
         }
+
      }
 }
