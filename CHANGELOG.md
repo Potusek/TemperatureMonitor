@@ -1,6 +1,17 @@
 # Changelog
 
-## [0.9.6] - 2025-03-24
+## [0.9.7] - 2025-03-23
+### Fixed
+- Improved server-side performance by optimizing temperature measurement interval
+- Enhanced tick listener management to ensure proper resource cleanup
+- Fixed potential issues with logging timestamps
+- Improved error handling for temperature measurements
+
+### Added
+- Better diagnostics for spawn point measurement location
+- Detailed logging of game time during temperature recordings
+
+## [0.9.6] - 2025-03-23
 ### Added
 - Greenhouse mode that shows temperatures adjusted by +5°C
 - Tooltip explanation for greenhouse mode
