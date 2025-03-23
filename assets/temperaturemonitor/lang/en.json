@@ -30,5 +30,6 @@
     "month_short_11": "Nov",
     "month_short_12": "Dec",
     "no_permission_sensor": "You don't have permission to change the temperature sensor location. Only server administrators can do this.",
-    "sensor_admin_note": " (Only server administrators can change this location.)"
+    "sensor_admin_note": " (Only server administrators can change this location.)",
+    "font_size": "Font size"
 }

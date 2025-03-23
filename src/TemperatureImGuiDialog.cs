@@ -11,6 +11,7 @@ using VSImGui.API;
 using System.Linq; // Dla OrderBy itp.
 using System.Text;
 using System.Numerics;
+using Newtonsoft.Json;
 
 namespace TemperatureMonitor
 {
@@ -20,11 +21,18 @@ namespace TemperatureMonitor
         private readonly Translation translation;
         private bool showWindow = false;
         private JObject temperatureData = new JObject();
+        private float fontScale = 1.0f;
+        private const float MIN_FONT_SCALE = 0.7f;
+        private const float MAX_FONT_SCALE = 1.5f;
+        private const float FONT_SCALE_STEP = 0.1f;
         
         public TemperatureImGuiDialog(ICoreClientAPI api, Translation translation)
         {
             this.api = api;
             this.translation = translation;
+            
+            // Wczytaj ustawienia czcionki
+            LoadFontSettings();
             
             // Rejestracja callbacka do rysowania GUI
             api.ModLoader.GetModSystem<ImGuiModSystem>().Draw += OnDraw;
@@ -81,10 +89,45 @@ namespace TemperatureMonitor
             }
             
             // Powiększenie nagłówka
-            float headerScale = 1.8f;
+            float headerScale = 1.8f * fontScale;
             ImGui.SetWindowFontScale(headerScale);
             ImGui.Text(translation.Get("temperature_history_days"));
-            ImGui.SetWindowFontScale(1.5f);
+            ImGui.SetWindowFontScale(1.0f * fontScale);
+            
+            // Przyciski zmieniające rozmiar czcionki - umieszczone po lewej stronie pod nagłówkiem
+            ImGui.SetCursorPos(new Vector2(10, ImGui.GetCursorPosY() + 5));
+
+            // Dodaj etykietę "Font size"
+            ImGui.Text(translation.Get("font_size") + ":");
+            ImGui.SameLine();
+
+            // Przycisk zmniejszania
+            if (ImGui.Button("-", new Vector2(25, 25)))
+            {
+                fontScale = Math.Max(fontScale - FONT_SCALE_STEP, MIN_FONT_SCALE);
+                SaveFontSettings();
+            }
+
+            ImGui.SameLine();
+            // Wyświetl aktualny rozmiar z przesunięciem w górę
+            float textY = ImGui.GetCursorPosY() - 2; // Przesuwamy tekst nieco wyżej
+            ImGui.SetCursorPosY(textY);
+            // Użyj szerszego pola dla tekstu, aby zmieścić znak %
+            ImGui.SetNextItemWidth(40);
+            ImGui.Text($"{(int)(fontScale * 100)}%%"); // Podwójny %% da jeden znak % w ImGui
+
+            ImGui.SameLine();
+            // Przycisk zwiększania
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 2); // Przywracamy pozycję dla przycisku
+            if (ImGui.Button("+", new Vector2(25, 25)))
+            {
+                fontScale = Math.Min(fontScale + FONT_SCALE_STEP, MAX_FONT_SCALE);
+                SaveFontSettings();
+            }
+            
+            // Powrót do normalnego przepływu UI
+            ImGui.SetCursorPosX(0);
+            ImGui.SetWindowFontScale(1.5f * fontScale);
             
             // Pasek separatora po nagłówku
             ImGui.Separator();
@@ -128,10 +171,10 @@ namespace TemperatureMonitor
                 
                 yearOpen = ImGui.TreeNodeEx($"{translation.Get("year")} {year}", ImGuiTreeNodeFlags.DefaultOpen);
                 ImGui.NextColumn();
-                ImGui.Text(string.Format("{0,18}",$"{yearMin:F1}°C"));
+                ImGui.Text(string.Format("{0,10}",$"{yearMin:F1}°C"));
                 // ImGui.Text($"{yearMin:F1}°C");
                 ImGui.NextColumn();
-                ImGui.Text(string.Format("{0,18}",$"{yearMax:F1}°C"));
+                ImGui.Text(string.Format("{0,10}",$"{yearMax:F1}°C"));
                 // ImGui.Text($"{yearMax:F1}°C");
                 ImGui.NextColumn();
                 
@@ -174,10 +217,10 @@ namespace TemperatureMonitor
                             bool monthOpen = ImGui.TreeNodeEx(monthName, ImGuiTreeNodeFlags.DefaultOpen);
                             ImGui.Unindent(10);
                             ImGui.NextColumn();
-                            ImGui.Text(string.Format("{0,18}",$"{monthMin:F1}°C"));
+                            ImGui.Text(string.Format("{0,10}",$"{monthMin:F1}°C"));
                             // ImGui.Text($"{monthMin:F1}°C");
                             ImGui.NextColumn();
-                            ImGui.Text(string.Format("{0,18}",$"{monthMax:F1}°C"));
+                            ImGui.Text(string.Format("{0,10}",$"{monthMax:F1}°C"));
                             // ImGui.Text($"{monthMax:F1}°C");
                             ImGui.NextColumn();
                             
@@ -237,10 +280,10 @@ namespace TemperatureMonitor
                                         ImGui.Text(day);
                                         ImGui.Unindent(20);
                                         ImGui.NextColumn();
-                                        ImGui.Text(string.Format("{0,18}",$"{dayMin:F1}°C"));
+                                        ImGui.Text(string.Format("{0,10}",$"{dayMin:F1}°C"));
                                         // ImGui.Text($"{dayMin:F1}°C");
                                         ImGui.NextColumn();
-                                        ImGui.Text(string.Format("{0,18}",$"{dayMax:F1}°C"));
+                                        ImGui.Text(string.Format("{0,10}",$"{dayMax:F1}°C"));
                                         // ImGui.Text($"{dayMax:F1}°C");
                                         ImGui.NextColumn();
                                         
@@ -273,5 +316,53 @@ namespace TemperatureMonitor
                 api.ModLoader.GetModSystem<ImGuiModSystem>().Draw -= OnDraw;
             }
         }
+
+        private void SaveFontSettings()
+        {
+            try
+            {
+                string configFolderPath = Path.Combine(GamePaths.DataPath, "ModData", "FontSettings");
+                if (!Directory.Exists(configFolderPath))
+                {
+                    Directory.CreateDirectory(configFolderPath);
+                }
+                
+                string configFilePath = Path.Combine(configFolderPath, "temperaturemonitor_font.json");
+                File.WriteAllText(configFilePath, JsonConvert.SerializeObject(new FontSettings { FontScale = fontScale }));
+            }
+            catch (Exception ex)
+            {
+                api.Logger.Error($"[TemperatureMonitor] Error saving font settings: {ex.Message}");
+            }
+        }
+
+        private void LoadFontSettings()
+        {
+            try
+            {
+                string configFilePath = Path.Combine(GamePaths.DataPath, "ModData", "FontSettings", "temperaturemonitor_font.json");
+                if (File.Exists(configFilePath))
+                {
+                    string json = File.ReadAllText(configFilePath);
+                    // Użyjmy konkretnej klasy zamiast dynamic
+                    var settings = JsonConvert.DeserializeObject<FontSettings>(json);
+                    if (settings != null && settings.FontScale > 0)
+                    {
+                        fontScale = Math.Clamp(settings.FontScale, MIN_FONT_SCALE, MAX_FONT_SCALE);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                api.Logger.Error($"[TemperatureMonitor] Error loading font settings: {ex.Message}");
+            }
+        }
+
+        // Dodaj klasę do przechowywania ustawień
+        private class FontSettings
+        {
+            public float FontScale { get; set; } = 1.0f;
+        }
+
     }
 }

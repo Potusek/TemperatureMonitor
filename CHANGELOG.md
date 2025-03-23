@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.5] - 2025-03-23
+### Added
+- Font size adjustment controls in temperature history window
+- Client-side persistence of font size preference
+- Visual percentage indicator of current font scale
+
+### Improved
+- Better placement of font size controls in the interface
+- Limited maximum font size to prevent UI elements from being cut off
+- Added translation support for font size interface elements
+- Enhanced readability for users with different screens and visual preferences
+
 ## [0.9.4] - 2025-03-21
 ### Security
 - Added admin-only restrictions for temperature sensor location changes

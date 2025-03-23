@@ -30,5 +30,6 @@
     "month_short_11": "Lis",
     "month_short_12": "Gru",
     "no_permission_sensor": "Nie masz uprawnień do zmiany lokalizacji czujnika temperatury. Tylko administratorzy serwera mogą to zrobić.",
-    "sensor_admin_note": " (Tylko administratorzy serwera mogą zmienić tę lokalizację.)"
+    "sensor_admin_note": " (Tylko administratorzy serwera mogą zmienić tę lokalizację.)",
+    "font_size": "Rozmiar czcionki"
 }
