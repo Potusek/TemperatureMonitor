@@ -33,13 +33,20 @@
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </None>
     </ItemGroup>
-    <!-- <Target Name="CopyToMods" AfterTargets="Build">
-      <Copy SourceFiles="$(TargetPath)" DestinationFolder="E:\Vintagestory\Mods" />
-      <Copy SourceFiles="$(ProjectDir)/modinfo.json" DestinationFolder="E:\Vintagestory\Mods\tempmod" />
-    </Target> -->
+
+    <Target Name="ReadModVersion" BeforeTargets="Package">
+      <ReadLinesFromFile File="modinfo.json">
+        <Output TaskParameter="Lines" ItemName="ModInfoContent" />
+      </ReadLinesFromFile>
+      <PropertyGroup>
+        <ModInfoContent>@(ModInfoContent, ' ')</ModInfoContent>
+        <ModVersion>$([System.Text.RegularExpressions.Regex]::Match($(ModInfoContent), '\"version\":\s*\"([^\"]+)\"').Groups[1].Value)</ModVersion>
+      </PropertyGroup>
+      <Message Text="Detected mod version: $(ModVersion)" Importance="high" />
+    </Target>
   
-    <Target Name="Package" AfterTargets="PostBuildEvent">
-        <ZipDirectory DestinationFile="bin/$(TargetName).zip" SourceDirectory="$(TargetDir)" Overwrite="true" />
+    <Target Name="Package" AfterTargets="PostBuildEvent" DependsOnTargets="ReadModVersion">
+      <ZipDirectory DestinationFile="bin/$(TargetName)-v$(ModVersion).zip" SourceDirectory="$(TargetDir)" Overwrite="true" />
     </Target>
 
   </Project>
