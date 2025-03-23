@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.9.6] - 2025-03-24
+### Added
+- Greenhouse mode that shows temperatures adjusted by +5°C
+- Tooltip explanation for greenhouse mode
+- Persistence of greenhouse mode setting
+
 ## [0.9.5] - 2025-03-23
 ### Added
 - Font size adjustment controls in temperature history window

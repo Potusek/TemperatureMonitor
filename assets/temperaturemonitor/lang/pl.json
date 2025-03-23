@@ -31,5 +31,7 @@
     "month_short_12": "Gru",
     "no_permission_sensor": "Nie masz uprawnień do zmiany lokalizacji czujnika temperatury. Tylko administratorzy serwera mogą to zrobić.",
     "sensor_admin_note": " (Tylko administratorzy serwera mogą zmienić tę lokalizację.)",
-    "font_size": "Rozmiar czcionki"
+    "font_size": "Rozmiar czcionki",
+    "greenhouse_mode": "Tryb szklarniowy (+5°C)",
+    "greenhouse_tooltip": "Pokazuje temperatury dostosowane do efektu szklarniowego (+5°C)"
 }
