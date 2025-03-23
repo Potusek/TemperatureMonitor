@@ -25,6 +25,7 @@ namespace TemperatureMonitor
         private const float MIN_FONT_SCALE = 0.7f;
         private const float MAX_FONT_SCALE = 1.5f;
         private const float FONT_SCALE_STEP = 0.1f;
+        private bool greenhouseMode = false;
         
         public TemperatureImGuiDialog(ICoreClientAPI api, Translation translation)
         {
@@ -32,7 +33,7 @@ namespace TemperatureMonitor
             this.translation = translation;
             
             // Wczytaj ustawienia czcionki
-            LoadFontSettings();
+            LoadUserSettings();
             
             // Rejestracja callbacka do rysowania GUI
             api.ModLoader.GetModSystem<ImGuiModSystem>().Draw += OnDraw;
@@ -105,7 +106,7 @@ namespace TemperatureMonitor
             if (ImGui.Button("-", new Vector2(25, 25)))
             {
                 fontScale = Math.Max(fontScale - FONT_SCALE_STEP, MIN_FONT_SCALE);
-                SaveFontSettings();
+                SaveUserSettings();
             }
 
             ImGui.SameLine();
@@ -122,9 +123,30 @@ namespace TemperatureMonitor
             if (ImGui.Button("+", new Vector2(25, 25)))
             {
                 fontScale = Math.Min(fontScale + FONT_SCALE_STEP, MAX_FONT_SCALE);
-                SaveFontSettings();
+                SaveUserSettings();
             }
-            
+
+            // Po kontrolkach rozmiaru czcionki, dodajemy trochę odstępu i checkbox trybu szklarniowego
+            ImGui.Spacing();
+            ImGui.Spacing();
+            ImGui.SetCursorPosX(10);
+
+            // Checkbox dla trybu szklarniowego
+            bool currentGreenhouseMode = greenhouseMode;
+            if (ImGui.Checkbox(translation.Get("greenhouse_mode"), ref currentGreenhouseMode))
+            {
+                greenhouseMode = currentGreenhouseMode;
+                SaveUserSettings();
+            }
+
+            // Dodaj tooltip z informacją o trybie szklarniowym
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.BeginTooltip();
+                ImGui.Text(translation.Get("greenhouse_tooltip"));
+                ImGui.EndTooltip();
+            }
+
             // Powrót do normalnego przepływu UI
             ImGui.SetCursorPosX(0);
             ImGui.SetWindowFontScale(1.5f * fontScale);
@@ -171,11 +193,9 @@ namespace TemperatureMonitor
                 
                 yearOpen = ImGui.TreeNodeEx($"{translation.Get("year")} {year}", ImGuiTreeNodeFlags.DefaultOpen);
                 ImGui.NextColumn();
-                ImGui.Text(string.Format("{0,10}",$"{yearMin:F1}°C"));
-                // ImGui.Text($"{yearMin:F1}°C");
+                ImGui.Text(string.Format("{0,10}",FormatTemperature(yearMin)));
                 ImGui.NextColumn();
-                ImGui.Text(string.Format("{0,10}",$"{yearMax:F1}°C"));
-                // ImGui.Text($"{yearMax:F1}°C");
+                ImGui.Text(string.Format("{0,10}",FormatTemperature(yearMax)));
                 ImGui.NextColumn();
                 
                 ImGui.PopStyleColor();
@@ -217,11 +237,9 @@ namespace TemperatureMonitor
                             bool monthOpen = ImGui.TreeNodeEx(monthName, ImGuiTreeNodeFlags.DefaultOpen);
                             ImGui.Unindent(10);
                             ImGui.NextColumn();
-                            ImGui.Text(string.Format("{0,10}",$"{monthMin:F1}°C"));
-                            // ImGui.Text($"{monthMin:F1}°C");
+                            ImGui.Text(string.Format("{0,10}",FormatTemperature(monthMin)));
                             ImGui.NextColumn();
-                            ImGui.Text(string.Format("{0,10}",$"{monthMax:F1}°C"));
-                            // ImGui.Text($"{monthMax:F1}°C");
+                            ImGui.Text(string.Format("{0,10}",FormatTemperature(monthMax)));
                             ImGui.NextColumn();
                             
                             ImGui.PopStyleColor();
@@ -280,11 +298,9 @@ namespace TemperatureMonitor
                                         ImGui.Text(day);
                                         ImGui.Unindent(20);
                                         ImGui.NextColumn();
-                                        ImGui.Text(string.Format("{0,10}",$"{dayMin:F1}°C"));
-                                        // ImGui.Text($"{dayMin:F1}°C");
+                                        ImGui.Text(string.Format("{0,10}",FormatTemperature(dayMin)));
                                         ImGui.NextColumn();
-                                        ImGui.Text(string.Format("{0,10}",$"{dayMax:F1}°C"));
-                                        // ImGui.Text($"{dayMax:F1}°C");
+                                        ImGui.Text(string.Format("{0,10}",FormatTemperature(dayMax)));
                                         ImGui.NextColumn();
                                         
                                         ImGui.PopStyleColor();
@@ -317,7 +333,7 @@ namespace TemperatureMonitor
             }
         }
 
-        private void SaveFontSettings()
+        private void SaveUserSettings()
         {
             try
             {
@@ -327,41 +343,59 @@ namespace TemperatureMonitor
                     Directory.CreateDirectory(configFolderPath);
                 }
                 
-                string configFilePath = Path.Combine(configFolderPath, "temperaturemonitor_font.json");
-                File.WriteAllText(configFilePath, JsonConvert.SerializeObject(new FontSettings { FontScale = fontScale }));
+                string configFilePath = Path.Combine(configFolderPath, "temperaturemonitor_settings.json");
+                File.WriteAllText(configFilePath, JsonConvert.SerializeObject(new UserSettings 
+                { 
+                    FontScale = fontScale,
+                    GreenhouseMode = greenhouseMode
+                }));
             }
             catch (Exception ex)
             {
-                api.Logger.Error($"[TemperatureMonitor] Error saving font settings: {ex.Message}");
+                api.Logger.Error($"[TemperatureMonitor] Error saving user settings: {ex.Message}");
             }
         }
 
-        private void LoadFontSettings()
+        private void LoadUserSettings()
         {
             try
             {
-                string configFilePath = Path.Combine(GamePaths.DataPath, "ModData", "FontSettings", "temperaturemonitor_font.json");
+                string configFilePath = Path.Combine(GamePaths.DataPath, "ModData", "FontSettings", "temperaturemonitor_settings.json");
                 if (File.Exists(configFilePath))
                 {
                     string json = File.ReadAllText(configFilePath);
-                    // Użyjmy konkretnej klasy zamiast dynamic
-                    var settings = JsonConvert.DeserializeObject<FontSettings>(json);
-                    if (settings != null && settings.FontScale > 0)
+                    var settings = JsonConvert.DeserializeObject<UserSettings>(json);
+                    if (settings != null)
                     {
-                        fontScale = Math.Clamp(settings.FontScale, MIN_FONT_SCALE, MAX_FONT_SCALE);
+                        if (settings.FontScale > 0)
+                        {
+                            fontScale = Math.Clamp(settings.FontScale, MIN_FONT_SCALE, MAX_FONT_SCALE);
+                        }
+                        greenhouseMode = settings.GreenhouseMode;
                     }
                 }
             }
             catch (Exception ex)
             {
-                api.Logger.Error($"[TemperatureMonitor] Error loading font settings: {ex.Message}");
+                api.Logger.Error($"[TemperatureMonitor] Error loading user settings: {ex.Message}");
             }
         }
 
         // Dodaj klasę do przechowywania ustawień
-        private class FontSettings
+        private class UserSettings
         {
             public float FontScale { get; set; } = 1.0f;
+            public bool GreenhouseMode { get; set; } = false;
+        }
+
+// Zamiast bezpośrednio wyświetlać temperaturę, używamy funkcji pomocniczej
+        private string FormatTemperature(float temperature)
+        {
+            if (float.IsNaN(temperature)) return "N/A";
+            
+            // Jeśli tryb szklarniowy jest włączony, dodaj 5°C do wyświetlanej wartości
+            float displayTemp = greenhouseMode ? temperature + 5.0f : temperature;
+            return $"{displayTemp:F1}°C";
         }
 
     }
