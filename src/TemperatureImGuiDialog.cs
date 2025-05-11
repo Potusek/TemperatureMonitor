@@ -88,7 +88,10 @@ namespace TemperatureMonitor
                 ImGui.Text(translation.Get("no_data"));
                 return;
             }
-            
+            // Pobierz bieżący rok i miesiąc z kalendarza gry
+            int currentYear = api.World.Calendar.Year;
+            int currentMonth = api.World.Calendar.Month; // 1-12
+
             // Powiększenie nagłówka
             float headerScale = 1.8f * fontScale;
             ImGui.SetWindowFontScale(headerScale);
@@ -191,7 +194,9 @@ namespace TemperatureMonitor
                 ImGui.SetColumnWidth(1, 150);
                 ImGui.SetColumnWidth(2, 150);
                 
-                yearOpen = ImGui.TreeNodeEx($"{translation.Get("year")} {year}", ImGuiTreeNodeFlags.DefaultOpen);
+                // yearOpen = ImGui.TreeNodeEx($"{translation.Get("year")} {year}", ImGuiTreeNodeFlags.DefaultOpen);
+                ImGuiTreeNodeFlags yearFlags = int.Parse(year) == currentYear ? ImGuiTreeNodeFlags.DefaultOpen : ImGuiTreeNodeFlags.None;
+                yearOpen = ImGui.TreeNodeEx($"{translation.Get("year")} {year}", yearFlags);
                 ImGui.NextColumn();
                 ImGui.Text(string.Format("{0,10}",FormatTemperature(yearMin)));
                 ImGui.NextColumn();
@@ -234,7 +239,11 @@ namespace TemperatureMonitor
                             
                             // Wcięcie dla miesięcy
                             ImGui.Indent(10);
-                            bool monthOpen = ImGui.TreeNodeEx(monthName, ImGuiTreeNodeFlags.DefaultOpen);
+                            // bool monthOpen = ImGui.TreeNodeEx(monthName, ImGuiTreeNodeFlags.DefaultOpen);
+                            ImGuiTreeNodeFlags monthFlags = (int.Parse(year) == currentYear && int.Parse(month) == currentMonth) 
+                                ? ImGuiTreeNodeFlags.DefaultOpen 
+                                : ImGuiTreeNodeFlags.None;
+                            bool monthOpen = ImGui.TreeNodeEx(monthName, monthFlags);
                             ImGui.Unindent(10);
                             ImGui.NextColumn();
                             ImGui.Text(string.Format("{0,10}",FormatTemperature(monthMin)));

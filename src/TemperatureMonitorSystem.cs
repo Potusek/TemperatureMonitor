@@ -62,7 +62,7 @@ namespace TemperatureMonitor
             string worldId = api?.World?.SavegameIdentifier.ToString() ?? string.Empty;
             this.worldSpecificPath = Path.Combine(GamePaths.DataPath, "ModData", worldId, "temperaturemonitor");
 
-            this.api.Logger.Debug($"TemperatureMonitor: Start method called! Zapis będzie w {this.worldSpecificPath}");
+            this.api.Logger.Debug($"TemperatureMonitor: Start method called! Will save to {this.worldSpecificPath}");
             base.Start(api);
         }
 
@@ -269,7 +269,7 @@ namespace TemperatureMonitor
                 // Sformatuj czas w bardziej czytelny sposób
                 string formattedGameTime = $"Rok {year}, {dayOfMonth} {(month)}, {hourOfDay:D2}:{minuteOfHour:D2}";
                 
-                ServerApi.Logger.Notification($"[TemperatureMonitor] Pomiar temperatury: {formattedGameTime}");
+                ServerApi.Logger.Notification($"[TemperatureMonitor] Temperature measurement: {formattedGameTime}");
                 lastCheckGameHour = gameHours;
                 CheckTemperatures();
             }
@@ -349,20 +349,20 @@ namespace TemperatureMonitor
         {
             if (this.ServerApi == null) 
             {
-                if (api != null) api.Logger.Error("[TemperatureMonitor] SaveTemperatureData: ServerApi jest null!");
+                if (api != null) api.Logger.Error("[TemperatureMonitor] SaveTemperatureData: ServerApi is null!");
                 return;
             }
             
             try
             {
-                this.ServerApi.Logger.Notification($"[TemperatureMonitor] Próba zapisania danych, liczba wpisów: {minTemperatures.Count}");
+                ServerApi.Logger.Notification($"[TemperatureMonitor] Attempting to save data, entry count: {minTemperatures.Count}");
                 // Dodaj dokładniejsze informacje o zapisywanych danych
-                this.ServerApi.Logger.Debug($"[TemperatureMonitor] DEBUG: Zapisywane dni: {string.Join(", ", minTemperatures.Keys)}");
+                this.ServerApi.Logger.Debug($"[TemperatureMonitor] DEBUG: Saving days: {string.Join(", ", minTemperatures.Keys)}");
                 
                 // Nie zapisuj jeśli nie ma danych
                 if (minTemperatures.Count == 0)
                 {
-                    this.ServerApi.Logger.Notification("[TemperatureMonitor] Brak danych do zapisania.");
+                    this.ServerApi.Logger.Notification("[TemperatureMonitor] No data to save.");
                     return;
                 }
                 
@@ -376,7 +376,7 @@ namespace TemperatureMonitor
                     string[] dateParts = date.Split('-');
                     if (dateParts.Length != 3) 
                     {
-                        this.ServerApi.Logger.Error($"[TemperatureMonitor] Nieprawidłowy format daty: {date}");
+                        this.ServerApi.Logger.Error($"[TemperatureMonitor] Invalid date format: {date}");
                         continue;
                     }
                     
@@ -402,14 +402,14 @@ namespace TemperatureMonitor
                     JObject? yearData = temperatureData[year] as JObject;
                     if (yearData == null) 
                     {
-                        this.ServerApi.Logger.Error($"[TemperatureMonitor] Nie można utworzyć obiektu roku: {year}");
+                        this.ServerApi.Logger.Error($"[TemperatureMonitor] Cannot create year object: {year}");
                         continue;
                     }
                     
                     JObject? months = yearData["months"] as JObject;
                     if (months == null) 
                     {
-                        this.ServerApi.Logger.Error($"[TemperatureMonitor] Nie można utworzyć obiektu miesięcy dla roku: {year}");
+                        this.ServerApi.Logger.Error($"[TemperatureMonitor] Cannot create months object for year: {year}");
                         continue;
                     }
                     
@@ -427,14 +427,14 @@ namespace TemperatureMonitor
                     JObject? monthData = months[month] as JObject;
                     if (monthData == null) 
                     {
-                        this.ServerApi.Logger.Error($"[TemperatureMonitor] Nie można utworzyć obiektu miesiąca: {month}");
+                        this.ServerApi.Logger.Error($"[TemperatureMonitor] Cannot create month object: {month}");
                         continue;
                     }
                     
                     JObject? days = monthData["days"] as JObject;
                     if (days == null) 
                     {
-                        this.ServerApi.Logger.Error($"[TemperatureMonitor] Nie można utworzyć obiektu dni dla miesiąca: {month}");
+                        this.ServerApi.Logger.Error($"[TemperatureMonitor] Cannot create days object for month: {month}");
                         continue;
                     }
                     
@@ -467,14 +467,14 @@ namespace TemperatureMonitor
                 }
                 
                 // Dodaj dodatkowy log dla ścieżki
-                this.ServerApi.Logger.Notification($"[TemperatureMonitor] Ścieżka do folderu: {this.worldSpecificPath}");
+                this.ServerApi.Logger.Notification($"[TemperatureMonitor] Path to folder: {this.worldSpecificPath}");
                 
                 // Upewnij się, że folder istnieje
                 if (this.worldSpecificPath != null)
                 {
                     if (!Directory.Exists(worldSpecificPath))
                     {
-                        this.ServerApi.Logger.Notification($"[TemperatureMonitor] Tworzenie katalogu: {worldSpecificPath}");
+                        this.ServerApi.Logger.Notification($"[TemperatureMonitor] Creating directory: {worldSpecificPath}");
                         Directory.CreateDirectory(worldSpecificPath);
                     }
                     
@@ -487,15 +487,15 @@ namespace TemperatureMonitor
                         try
                         {
                             File.Copy(filePath, backupPath, true);
-                            this.ServerApi.Logger.Debug($"[TemperatureMonitor] Utworzono kopię zapasową: {backupPath}");
+                            this.ServerApi.Logger.Debug($"[TemperatureMonitor] Created backup: {backupPath}");
                         }
                         catch (Exception ex)
                         {
-                            this.ServerApi.Logger.Error($"[TemperatureMonitor] Błąd tworzenia kopii zapasowej: {ex.Message}");
+                            this.ServerApi.Logger.Error($"[TemperatureMonitor] Error creating backup: {ex.Message}");
                         }
                     }
                     
-                    this.ServerApi.Logger.Notification($"[TemperatureMonitor] Zapisywanie do pliku: {filePath}");
+                    this.ServerApi.Logger.Notification($"[TemperatureMonitor] Saving to file: {filePath}");
                     
                     // Zapisz dane do tymczasowego pliku
                     string tempFilePath = filePath + ".tmp";
@@ -517,41 +517,41 @@ namespace TemperatureMonitor
                             }
                             File.Move(tempFilePath, filePath);
                             
-                            this.ServerApi.Logger.Notification($"[TemperatureMonitor] Plik został pomyślnie zapisany.");
+                            this.ServerApi.Logger.Notification($"[TemperatureMonitor] File successfully saved.");
                             
                             // Zaloguj fragment zapisanych danych
                             string savedContent = File.ReadAllText(filePath);
-                            this.ServerApi.Logger.Debug($"[TemperatureMonitor] Rozmiar zapisanych danych: {savedContent.Length} bajtów.");
+                            this.ServerApi.Logger.Debug($"[TemperatureMonitor] Size of saved data: {savedContent.Length} bytes.");
                         }
                         catch (Exception ex)
                         {
-                            this.ServerApi.Logger.Error($"[TemperatureMonitor] Błąd weryfikacji JSON: {ex.Message}");
+                            this.ServerApi.Logger.Error($"[TemperatureMonitor] Error verifying JSON: {ex.Message}");
                         }
                     }
                     else
                     {
-                        this.ServerApi.Logger.Error($"[TemperatureMonitor] BŁĄD: Tymczasowy plik nie istnieje lub jest pusty!");
+                        this.ServerApi.Logger.Error($"[TemperatureMonitor] ERROR: Temporary file does not exist or is empty!");
                     }
                     
                     // Sprawdź czy plik istnieje po zapisie
                     if (File.Exists(filePath))
                     {
                         FileInfo fi = new FileInfo(filePath);
-                        this.ServerApi.Logger.Notification($"[TemperatureMonitor] Plik został pomyślnie zapisany. Rozmiar: {fi.Length} bajtów");
+                        this.ServerApi.Logger.Notification($"[TemperatureMonitor] File successfully saved. Size: {fi.Length} bytes");
                     }
                     else
                     {
-                        this.ServerApi.Logger.Error($"[TemperatureMonitor] BŁĄD: Plik nie istnieje po próbie zapisu!");
+                        this.ServerApi.Logger.Error($"[TemperatureMonitor] ERROR: File does not exist after save attempt!");
                     }
                 }
                 else
                 {
-                    this.ServerApi.Logger.Error("[TemperatureMonitor] BŁĄD: worldSpecificPath jest null!");
+                    this.ServerApi.Logger.Error("[TemperatureMonitor] ERROR: worldSpecificPath is null!");
                 }
             }
             catch (Exception ex)
             {
-                this.ServerApi.Logger.Error($"[TemperatureMonitor] Błąd zapisu danych: {ex.Message}\nStack: {ex.StackTrace}");
+                this.ServerApi.Logger.Error($"[TemperatureMonitor] Error saving data: {ex.Message}\nStack: {ex.StackTrace}");
             }
         }
 
@@ -707,12 +707,12 @@ namespace TemperatureMonitor
                     string jsonContent = File.ReadAllText(filePath);
                     if (string.IsNullOrWhiteSpace(jsonContent) || jsonContent == "{}")
                     {
-                        ServerApi.Logger.Notification("[TemperatureMonitor] Plik danych jest pusty, brak poprzednich zapisów.");
+                        ServerApi.Logger.Notification("[TemperatureMonitor] Data file is empty, no previous records.");
                         return;
                     }
                     
                     JObject temperatureData = JObject.Parse(jsonContent);
-                    ServerApi.Logger.Debug($"[TemperatureMonitor] Wczytano plik JSON, struktura główna zawiera {temperatureData.Count} elementów");
+                    ServerApi.Logger.Notification($"[TemperatureMonitor] Loaded {minTemperatures.Count} temperature records from file.");
                     
                     // Iteracja po latach
                     foreach (var yearProp in temperatureData.Properties())
@@ -763,7 +763,7 @@ namespace TemperatureMonitor
                                                 minTemperatures[formattedDate] = min;
                                                 maxTemperatures[formattedDate] = max;
                                                 
-                                                ServerApi.Logger.Debug($"[TemperatureMonitor] Wczytano temperaturę dla {formattedDate}: min={min:F1}°C, max={max:F1}°C");
+                                                ServerApi.Logger.Debug($"[TemperatureMonitor] Loaded temperature for {formattedDate}: min={min:F1}°C, max={max:F1}°C");
                                             }
                                         }
                                     }
@@ -772,7 +772,7 @@ namespace TemperatureMonitor
                         }
                     }
                     
-                    ServerApi.Logger.Notification($"[TemperatureMonitor] Wczytano {minTemperatures.Count} zapisów temperatur z pliku.");
+                    ServerApi.Logger.Notification($"[TemperatureMonitor] Loaded {minTemperatures.Count} temperature records from file.");
                     if (minTemperatures.Count > 0)
                     {
                         var keysArray = minTemperatures.Keys.ToArray();
@@ -783,7 +783,7 @@ namespace TemperatureMonitor
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[TemperatureMonitor] Błąd wczytywania zapisanych danych: {ex.Message}");
+                    ServerApi.Logger.Error($"[TemperatureMonitor] Error loading saved data: {ex.Message}");
                 }
             }
         }
@@ -831,7 +831,7 @@ namespace TemperatureMonitor
                 // Zapisz dane przy zamknięciu
                 if (minTemperatures.Count > 0)
                 {
-                    ServerApi.Logger.Notification($"[TemperatureMonitor] Zamykanie - zapisywanie {minTemperatures.Count} temperatur");
+                    ServerApi.Logger.Notification($"[TemperatureMonitor] Closing - saving {minTemperatures.Count} temperatures");
                     SaveTemperatureData();
                 }
                 if (gameTickListenerId.HasValue)
