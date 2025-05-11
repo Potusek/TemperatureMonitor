@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.9.8] - 2025-03-24
+### Changed
+- Temperature history tree view now defaults to collapsed state for all years/months except current ones
+- Only the current year and current month are expanded by default in the temperature history window
+- Improved user experience by reducing visual clutter in temperature history display
+
+### Fixed
+- Changed all server notification messages from Polish to English for better international compatibility
+- Server logs are now displayed in English regardless of client language settings
+
 ## [0.9.7] - 2025-03-23
 ### Fixed
 - Improved server-side performance by optimizing temperature measurement interval
