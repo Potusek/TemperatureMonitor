@@ -1,7 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
-using Newtonsoft.Json;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
 
@@ -20,22 +17,29 @@ namespace TemperatureMonitor
 
         public string Get(string key, params object[]? args)
         {
-            // Użyj wbudowanego systemu tłumaczeń
-            string translated = Lang.Get("temperaturemonitor:" + key, langCode);
+            // Użyj wbudowanego systemu tłumaczeń BEZ langCode - użyje aktualnego języka gracza
+            string translated = Lang.Get("temperaturemonitor:" + key);
             
-            // Jeśli zwrócono ten sam klucz, oznacza to, że tłumaczenie nie zostało znalezione
-            if (translated == "temperaturemonitor:" + key)
+            // Jeśli zwrócono klucz z prefiksem, oznacza to że tłumaczenie nie zostało znalezione
+            string fullKey = "temperaturemonitor:" + key;
+            if (translated == fullKey)
             {
-                api.Logger.Debug($"[TemperatureMonitor] Translation NOT found for '{key}'");
-                return key;
+                api.Logger.Warning($"[TemperatureMonitor] Translation NOT found for '{key}'");
+                return key; // Zwróć sam klucz bez prefiksu
             }
-            
-            // api.Logger.Debug($"[TemperatureMonitor] Translation found for '{key}': '{translated}'");
             
             // Jeśli mamy argumenty do formatowania
             if (args != null && args.Length > 0)
             {
-                return string.Format(translated, args);
+                try
+                {
+                    return string.Format(translated, args);
+                }
+                catch (FormatException ex)
+                {
+                    api.Logger.Error($"[TemperatureMonitor] Format error for key '{key}': {ex.Message}");
+                    return translated; // Zwróć nieformatowany tekst
+                }
             }
             
             return translated;

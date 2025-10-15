@@ -33,5 +33,19 @@
     "sensor_admin_note": " (Tylko administratorzy serwera mogą zmienić tę lokalizację.)",
     "font_size": "Rozmiar czcionki",
     "greenhouse_mode": "Tryb szklarniowy (+5°C)",
-    "greenhouse_tooltip": "Pokazuje temperatury dostosowane do efektu szklarniowego (+5°C)"
+    "greenhouse_tooltip": "Pokazuje temperatury dostosowane do efektu szklarniowego (+5°C)",
+    "sensor_status_active": "Aktywny [OK]",
+    "sensor_status_warning": "Ostrzeżenie [!] - Lokacja nie załadowana",
+    "sensor_last_measurement": "Ostatni udany pomiar: {0}",
+    "sensor_failed_attempts": "Kolejne nieudane próby: {0}",
+    "sensor_never_measured": "Nie wykonano jeszcze żadnych pomiarów",
+    "sensor_location_unreachable": "[!] Ostrzeżenie: Lokacja czujnika temperatury nie jest załadowana. Rozważ użycie '/tempsensor setcurrlocation' aby przenieść czujnik do aktywnego obszaru.",
+    "sensor_location_unreachable_info": "Lokacja pomiaru ({0}, {1}, {2}) nie jest obecnie załadowana. Monitorowanie temperatury jest wstrzymane do czasu, aż obszar stanie się dostępny.",
+    "time_just_now": "przed chwilą",
+    "time_minutes_ago": "{0} minut temu",
+    "time_minute_ago": "minutę temu",
+    "time_hours_ago": "{0} godzin temu",
+    "time_hour_ago": "godzinę temu",
+    "time_days_ago": "{0} dni temu",
+    "time_day_ago": "dzień temu"
 }

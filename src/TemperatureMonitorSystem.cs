@@ -48,6 +48,11 @@ namespace TemperatureMonitor
         private ModConfig? config;
         // Dodaj to w części deklaracji pól klasy
         private long? gameTickListenerId = null;
+        // Śledzenie statusu pomiarów
+        private int consecutiveFailedMeasurements = 0;
+        private bool warningShownThisSession = false;
+        private DateTime? lastSuccessfulMeasurement = null;
+        private const int FAILED_ATTEMPTS_THRESHOLD = 5;
 
         public override void Start(ICoreAPI api)
         {
@@ -131,9 +136,6 @@ namespace TemperatureMonitor
             
             // Dodajemy log po rejestracji komendy
             api.Logger.Debug("[TemperatureMonitor] Command registered successfully");
-            
-            // Zapewnij, że obszar pomiaru pozostanie aktywny
-            EnsureMeasurementAreaIsLoaded();
             
             // Pozostawiamy również ticker jako dodatkowe zabezpieczenie
             gameTickListenerId = api.Event.RegisterGameTickListener(OnGameTick, 5000); // Sprawdzanie co 5 sekund
@@ -310,8 +312,55 @@ namespace TemperatureMonitor
                     ServerApi.Logger.Debug($"[TemperatureMonitor] Measuring at configured location: {measurementPosition.X}, {measurementPosition.Y}, {measurementPosition.Z}");
                 }
 
-                // Pobierz temperaturę w wybranym punkcie
-                float currentTemp = this.ServerApi.World.BlockAccessor.GetClimateAt(measurementPosition).Temperature;
+                // NOWE: Sprawdź czy chunk jest załadowany
+                int chunkX = measurementPosition.X / GlobalConstants.ChunkSize;
+                int chunkZ = measurementPosition.Z / GlobalConstants.ChunkSize;
+
+                var chunk = ServerApi.World.BlockAccessor.GetChunk(chunkX, measurementPosition.Y / GlobalConstants.ChunkSize, chunkZ);
+                
+                if (chunk == null)
+                {
+                    consecutiveFailedMeasurements++;
+                    ServerApi.Logger.Warning($"[TemperatureMonitor] Measurement location chunk not loaded (attempt {consecutiveFailedMeasurements}). Position: ({measurementPosition.X}, {measurementPosition.Y}, {measurementPosition.Z})");
+                    
+                    // Wyślij ostrzeżenie do admina po przekroczeniu progu
+                    if (consecutiveFailedMeasurements >= FAILED_ATTEMPTS_THRESHOLD && !warningShownThisSession)
+                    {
+                        NotifyAdminsAboutUnloadedLocation(measurementPosition);
+                        warningShownThisSession = true;
+                    }
+                    
+                    return; // Przerwij pomiar, spróbuj ponownie przy następnym ticku
+                }
+
+                // NOWE: Sprawdź czy GetClimateAt zwraca prawidłowe dane
+                var climate = this.ServerApi.World.BlockAccessor.GetClimateAt(measurementPosition);
+                
+                if (climate == null)
+                {
+                    consecutiveFailedMeasurements++;
+                    ServerApi.Logger.Warning($"[TemperatureMonitor] Climate data unavailable at measurement location (attempt {consecutiveFailedMeasurements}). Position: ({measurementPosition.X}, {measurementPosition.Y}, {measurementPosition.Z})");
+                    
+                    if (consecutiveFailedMeasurements >= FAILED_ATTEMPTS_THRESHOLD && !warningShownThisSession)
+                    {
+                        NotifyAdminsAboutUnloadedLocation(measurementPosition);
+                        warningShownThisSession = true;
+                    }
+                    
+                    return;
+                }
+                
+                // Pobierz temperaturę
+                float currentTemp = climate.Temperature;
+                
+                // SUKCES: Zresetuj licznik błędów i zapisz czas pomiaru
+                if (consecutiveFailedMeasurements > 0)
+                {
+                    ServerApi.Logger.Notification($"[TemperatureMonitor] Measurement location is now accessible again after {consecutiveFailedMeasurements} failed attempts.");
+                }
+                consecutiveFailedMeasurements = 0;
+                warningShownThisSession = false;
+                lastSuccessfulMeasurement = DateTime.Now;
                 
                 // Aktualizuj min temperaturę
                 if (!minTemperatures.ContainsKey(gameDate) || currentTemp < minTemperatures[gameDate])
@@ -330,17 +379,49 @@ namespace TemperatureMonitor
             }
             catch (Exception ex)
             {
-                this.ServerApi.Logger.Error("Temperature Logger error: " + ex.Message);
+                consecutiveFailedMeasurements++;
+                this.ServerApi.Logger.Error($"[TemperatureMonitor] Temperature measurement error (attempt {consecutiveFailedMeasurements}): {ex.Message}");
+                
+                if (consecutiveFailedMeasurements >= FAILED_ATTEMPTS_THRESHOLD && !warningShownThisSession)
+                {
+                    this.ServerApi.Logger.Error($"[TemperatureMonitor] Multiple measurement failures detected. Stack trace: {ex.StackTrace}");
+                }
             }
             
             // Zapisz wyniki do pliku
             SaveTemperatureData();
         }
 
+        private void NotifyAdminsAboutUnloadedLocation(BlockPos position)
+        {
+            if (ServerApi == null || translation == null) return;
+            
+            ServerApi.Logger.Warning($"[TemperatureMonitor] {translation.Get("sensor_location_unreachable_info", position.X, position.Y, position.Z)}");
+            
+            // Wyślij wiadomość do wszystkich graczy z uprawnieniami admina
+            foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+            {
+                if (player.Role?.Code == "admin" || player.Role?.Code == "suplayer")
+                {
+                    player.SendMessage(
+                        GlobalConstants.GeneralChatGroup,
+                        translation.Get("sensor_location_unreachable"),
+                        EnumChatType.Notification
+                    );
+                    
+                    player.SendMessage(
+                        GlobalConstants.GeneralChatGroup,
+                        translation.Get("sensor_location_unreachable_info", position.X, position.Y, position.Z),
+                        EnumChatType.Notification
+                    );
+                }
+            }
+        }
+        
         private void LogTemperature(float temperature, string gameDate)
         {
             if (this.ServerApi == null) return;
-            
+
             string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"); // Możemy zachować rzeczywisty czas dla celów logowania
             this.ServerApi.Logger.Notification($"[TemperatureMonitor] {timestamp} - Game date: {gameDate}, Temperature: {temperature:F1}°C");
         }
@@ -679,18 +760,70 @@ namespace TemperatureMonitor
                                 player.Role.Code.Equals("owner", StringComparison.InvariantCultureIgnoreCase);
             string adminNote = hasPermission ? "" : translation.Get("sensor_admin_note");
             
-            if (config.UseSpawnPoint)
+            // Przygotuj informacje o statusie
+            string statusInfo = "";
+            if (lastSuccessfulMeasurement.HasValue)
             {
-                EntityPos spawnPos = ServerApi.World.DefaultSpawnPosition;
-                player.SendMessage(groupId, translation.Get("sensor_current_spawn", (int)spawnPos.X, (int)spawnPos.Y, (int)spawnPos.Z) + adminNote, EnumChatType.Notification);
-            }
-            else if (config.MeasurementX.HasValue && config.MeasurementY.HasValue && config.MeasurementZ.HasValue)
-            {
-                player.SendMessage(groupId, translation.Get("sensor_current_location", config.MeasurementX, config.MeasurementY, config.MeasurementZ) + adminNote, EnumChatType.Notification);
+                TimeSpan timeSince = DateTime.Now - lastSuccessfulMeasurement.Value;
+                string timeAgo = "nie wiem";
+                
+                if (timeSince.TotalMinutes < 1)
+                    timeAgo = translation.Get("time_just_now");
+                else if (timeSince.TotalMinutes < 2)
+                    timeAgo = translation.Get("time_minute_ago");
+                else if (timeSince.TotalMinutes < 60)
+                    timeAgo = translation.Get("time_minutes_ago", (int)timeSince.TotalMinutes);
+                else if (timeSince.TotalHours < 2)
+                    timeAgo = translation.Get("time_hour_ago");
+                else if (timeSince.TotalHours < 24)
+                    timeAgo = translation.Get("time_hours_ago", (int)timeSince.TotalHours);
+                else if (timeSince.TotalDays < 2)
+                    timeAgo = translation.Get("time_day_ago");
+                else
+                    timeAgo = translation.Get("time_days_ago", (int)timeSince.TotalDays);
+
+                statusInfo = "\n" + translation.Get("sensor_last_measurement", timeAgo);
             }
             else
             {
-                player.SendMessage(groupId, translation.Get("sensor_not_configured") + adminNote, EnumChatType.Notification);
+                statusInfo = "\n" + translation.Get("sensor_never_measured");
+            }
+
+            // Dodaj status pomiarów
+            string measurementStatus = consecutiveFailedMeasurements >= FAILED_ATTEMPTS_THRESHOLD
+                ? translation.Get("sensor_status_warning")
+                : translation.Get("sensor_status_active");
+
+            if (consecutiveFailedMeasurements > 0)
+            {
+                statusInfo += "\n" + translation.Get("sensor_failed_attempts", consecutiveFailedMeasurements);
+            }
+
+            if (config.UseSpawnPoint)
+            {
+                EntityPos spawnPos = ServerApi.World.DefaultSpawnPosition;
+                player.SendMessage(groupId, 
+                    translation.Get("sensor_current_spawn", (int)spawnPos.X, (int)spawnPos.Y, (int)spawnPos.Z) + 
+                    "\nStatus: " + measurementStatus + 
+                    statusInfo + 
+                    adminNote, 
+                    EnumChatType.Notification);
+            }
+            else if (config.MeasurementX.HasValue && config.MeasurementY.HasValue && config.MeasurementZ.HasValue)
+            {
+                player.SendMessage(groupId, 
+                    translation.Get("sensor_current_location", config.MeasurementX, config.MeasurementY, config.MeasurementZ) + 
+                    "\nStatus: " + measurementStatus + 
+                    statusInfo + 
+                    adminNote, 
+                    EnumChatType.Notification);
+            }
+            else
+            {
+                player.SendMessage(groupId, 
+                    translation.Get("sensor_not_configured") + 
+                    adminNote, 
+                    EnumChatType.Notification);
             }
         }
 
@@ -790,21 +923,53 @@ namespace TemperatureMonitor
 
         private void EnsureMeasurementAreaIsLoaded()
         {
-            if (ServerApi == null || config == null) return;
-            
+            if (ServerApi == null)
+            {
+                api?.Logger.Error("[TemperatureMonitor] EnsureMeasurementAreaIsLoaded: ServerApi is null!");
+                return;
+            }
+
+            if (config == null)
+            {
+                ServerApi.Logger.Error("[TemperatureMonitor] EnsureMeasurementAreaIsLoaded: config is null!");
+                return;
+            }
+
             try
             {
-                BlockPos measurementPosition;
-                
+                ServerApi.Logger.Debug("[TemperatureMonitor] EnsureMeasurementAreaIsLoaded: Starting...");
+
+                BlockPos? measurementPosition = null;
+
                 // Wybierz miejsce pomiaru na podstawie konfiguracji
                 if (config.UseSpawnPoint || !config.MeasurementX.HasValue || !config.MeasurementY.HasValue || !config.MeasurementZ.HasValue)
                 {
-                    // Pobierz punkt spawnu
-                    EntityPos spawnEntityPos = ServerApi.World.DefaultSpawnPosition;
+                    ServerApi.Logger.Debug("[TemperatureMonitor] Using spawn point for measurement");
+
+                    // Sprawdź czy World istnieje
+                    if (ServerApi.World == null)
+                    {
+                        ServerApi.Logger.Warning("[TemperatureMonitor] ServerApi.World is null!");
+                        return;
+                    }
+
+                    // Pobierz punkt spawnu - sprawdź czy nie jest null
+                    EntityPos? spawnEntityPos = ServerApi.World.DefaultSpawnPosition;
+                    ServerApi.Logger.Debug($"[TemperatureMonitor] DefaultSpawnPosition is {(spawnEntityPos == null ? "NULL" : "OK")}");
+
+                    if (spawnEntityPos == null)
+                    {
+                        ServerApi.Logger.Warning("[TemperatureMonitor] DefaultSpawnPosition is not yet available. Measurement will start when world is fully loaded.");
+                        return;
+                    }
+
                     measurementPosition = new BlockPos((int)spawnEntityPos.X, (int)spawnEntityPos.Y, (int)spawnEntityPos.Z);
+                    ServerApi.Logger.Debug($"[TemperatureMonitor] Measurement position set to: ({measurementPosition.X}, {measurementPosition.Y}, {measurementPosition.Z})");
                 }
                 else
                 {
+                    ServerApi.Logger.Debug($"[TemperatureMonitor] Using configured location: ({config.MeasurementX}, {config.MeasurementY}, {config.MeasurementZ})");
+
                     // Użyj skonfigurowanych koordynatów
                     measurementPosition = new BlockPos(
                         config.MeasurementX.Value,
@@ -812,17 +977,23 @@ namespace TemperatureMonitor
                         config.MeasurementZ.Value
                     );
                 }
-                
-                // Ponieważ nie mamy bezpośredniej metody do utrzymania chunka załadowanego,
-                // będziemy polegać na regularnych tickach do wykonywania pomiarów
-                ServerApi.Logger.Notification($"[TemperatureMonitor] Setup for measurement position: ({measurementPosition.X}, {measurementPosition.Y}, {measurementPosition.Z})");
+
+                if (measurementPosition != null)
+                {
+                    ServerApi.Logger.Notification($"[TemperatureMonitor] Setup for measurement position: ({measurementPosition.X}, {measurementPosition.Y}, {measurementPosition.Z})");
+                }
+                else
+                {
+                    ServerApi.Logger.Warning("[TemperatureMonitor] measurementPosition is null after setup!");
+                }
             }
             catch (Exception ex)
             {
                 ServerApi.Logger.Error($"[TemperatureMonitor] Error setting up measurement area: {ex.Message}");
+                ServerApi.Logger.Error($"[TemperatureMonitor] Stack trace: {ex.StackTrace}");
             }
         }
-
+        
         public override void Dispose()
         {
             // Upewnij się, że wszystkie dane są zapisane przy wyładowaniu moda
