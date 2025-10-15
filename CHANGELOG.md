@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.9.9] - 2025-10-15
+### Fixed
+- Fixed null reference exception when measurement location chunk is not loaded
+- Added validation to check if measurement position is accessible before taking temperature readings
+
+### Added
+- Intelligent measurement failure handling with consecutive failure counter
+- Admin notifications when sensor location is unreachable (after 5 failed attempts)
+- Enhanced `/tempsensor` command with measurement status display:
+  - Current status (Active ✓ / Warning ⚠)
+  - Time since last successful measurement
+  - Count of consecutive failed attempts
+- Automatic retry mechanism for temperature measurements
+
+### Improved
+- Better error logging for debugging measurement issues
+- More informative feedback when sensor location is not loaded
+
 ## [0.9.8] - 2025-03-24
 ### Changed
 - Temperature history tree view now defaults to collapsed state for all years/months except current ones

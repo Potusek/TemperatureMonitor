@@ -33,5 +33,19 @@
     "sensor_admin_note": " (Only server administrators can change this location.)",
     "font_size": "Font size",
     "greenhouse_mode": "Greenhouse mode (+5°C)",
-    "greenhouse_tooltip": "Shows temperatures adjusted for greenhouse effect (+5°C)"
+    "greenhouse_tooltip": "Shows temperatures adjusted for greenhouse effect (+5°C)",
+    "sensor_status_active": "Active [OK]",
+    "sensor_status_warning": "Warning [!] - Location not loaded",
+    "sensor_last_measurement": "Last successful measurement: {0}",
+    "sensor_failed_attempts": "Consecutive failed attempts: {0}",
+    "sensor_never_measured": "No measurements taken yet",
+    "sensor_location_unreachable": "[!] Warning: Temperature sensor location is not loaded. Consider using '/tempsensor setcurrlocation' to move the sensor to an active area.",
+    "sensor_location_unreachable_info": "The measurement location at ({0}, {1}, {2}) is not currently loaded. Temperature monitoring is paused until the area becomes accessible.",
+    "time_just_now": "just now",
+    "time_minute_ago": "1 minute ago",
+    "time_minutes_ago": "{0} minutes ago",
+    "time_hour_ago": "1 hour ago",
+    "time_hours_ago": "{0} hours ago",
+    "time_day_ago": "1 day ago",
+    "time_days_ago": "{0} days ago"
 }
