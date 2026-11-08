@@ -2,11 +2,11 @@
   "type": "code",
   "modid": "temperaturemonitor",
   "name": "Temperature Monitor [BETA]",
-  "version": "0.9.9",
+  "version": "0.9.10",
   "description": "Automatically monitors and records minimum and maximum temperatures in the game world. Data is accessible by pressing Alt+T. Useful for tracking long-term climate statistics or planning crops and buildings according to weather conditions.",
   "authors": ["Potusek"],
   "dependencies": {
-    "game": "1.21.5",
-    "vsimgui": "1.1.14"
+    "game": "1.22.0",
+    "vsimgui": "1.2.7"
   }
 }

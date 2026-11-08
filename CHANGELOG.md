@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.9.10] - 2026-11-08
+### Changed
+- Updated for Vintage Story 1.22 (requires game 1.22.0 or newer)
+- Retargeted project to .NET 10 (required by Vintage Story 1.22)
+- Updated VSImGui dependency to 1.2.7 (1.22-compatible release)
+
 ## [0.9.9] - 2025-10-15
 ### Fixed
 - Fixed null reference exception when measurement location chunk is not loaded
